@@ -1,69 +1,106 @@
-# Conciliador CAIXA 2026
+# Caixa Pessoal
 
-Web app estático que concilia o **extrato da conta** e a **fatura do cartão** do Itaú com a planilha **CAIXA 2026**. Ele categoriza, deduplica, completa séries de parcelas, separa o que não reconheceu em **Pendências** e confere o saldo do banco contra o da planilha.
+App de fluxo de caixa pessoal para a Vercel, construído sobre o modelo da planilha **CAIXA 2026**:
 
-- Tudo roda **no navegador**: nenhum dado sai do dispositivo (CSP com `connect-src 'none'`). Não há backend nem banco de dados.
-- A planilha-mestra **nunca é alterada**. O app só gera os lançamentos novos, para copiar (TSV) ou baixar (.xlsx).
-- A planilha-base fica salva no `localStorage` do navegador. Você a carrega uma vez só.
+- **CASH**: movimentos da conta corrente.
+- **CARTÃO**: uma linha por parcela. Cada parcela entra no caixa no mês de **vencimento da fatura**.
+- **CAIXA MENSAL**: previsto × realizado por grupo e subgrupo, com saldo encadeado.
+- **Apoio**: as categorias e os cartões (Itaú Black e Nubank).
+
+Os extratos e as faturas do **Itaú** e do **Nubank** chegam por **Open Finance** (via [Pluggy](https://pluggy.ai)). São categorizados, conciliados com o que já está na planilha e projetados (parcelas futuras).
+
+## O que o app faz
+
+| Tela | Conteúdo |
+|---|---|
+| **Painel** | Entradas, saídas, geração de caixa e saldo final do mês (com % do previsto), gráfico de 12 meses, destaques, gastos por grupo contra a média, faturas por cartão |
+| **Fluxo de caixa** | Réplica do CAIXA MENSAL: grupos e subgrupos × meses, previsto × realizado, edição do previsto com um clique, replicação do previsto entre meses, exportação .xlsx |
+| **Lançamentos** | Filtros (mês, tipo, conta, subgrupo, busca), recategorização com **“lembrar”** (vira regra), ignorar (transferências), lançamento manual com parcelas, fila **Revisar** |
+| **Cartões** | Fatura do mês por cartão, próximas faturas, limite (Open Finance), compras parceladas em aberto, resumo por subgrupo (a aba “Resumo Cartão”) |
+| **Insights** | Projeção de saldo para 6 meses (cenário de entradas pela média ou pelo previsto), geração de caixa por mês, gastos recorrentes, tendência por grupo e alertas automáticos |
+| **Dados & bancos** | Conectar Itaú e Nubank, sincronizar, data de corte, importar e exportar a planilha, saldo inicial, regras |
+
+### Insights automáticos
+- Saldo projetado negativo: primeiro mês em que o saldo fica abaixo de zero, somando as parcelas já contratadas.
+- Subgrupos acima do previsto.
+- Subgrupos que mais subiram ou caíram contra a média dos 3 meses anteriores.
+- Total comprometido em parcelas e o mês em que elas “aliviam”.
+- Gastos recorrentes, como assinaturas e aluguel.
+- Peso da “Despesa não identificada” nas saídas.
+- Maior saída do mês e participação do cartão nas saídas.
+- Pendências de revisão.
+
+## Como os dados se encaixam
+
+- **Sinal do valor**: igual à planilha. Numa despesa, positivo é saída e negativo é estorno ou resgate. Numa receita, positivo é entrada. Geração de caixa = entradas − saídas.
+- **Categorização**, em ordem de prioridade:
+  1. regras suas (criadas com “lembrar”);
+  2. regras **aprendidas do histórico da planilha** (cerca de 300);
+  3. dicionário de palavras-chave (herdado do conciliador e ampliado);
+  4. categoria da Pluggy;
+  5. “Despesa não identificada”, que vai para a fila **Revisar**.
+- **Conta (Open Finance)**:
+  - débito → CASH;
+  - crédito → entrada (Salário, V4, Serviço Contábil…), ou despesa negativa quando é resgate ou estorno;
+  - **pagamento de fatura é ignorado**, porque as parcelas já estão no cartão.
+- **Cartão (Open Finance)**:
+  - o vencimento vem da fatura (`billId`) ou é calculado pelo dia de fechamento;
+  - parcela *k/n* gera as parcelas *k+1…n* como **projeção**; quando a parcela real chega, ela substitui a projeção (mesma chave);
+  - o crédito de pagamento da fatura é ignorado.
+- **Conciliação com a planilha**: a partir da **data de corte** (padrão: 1º dia do mês atual), o banco alimenta o app. Um movimento do banco que já existe na planilha é **vinculado**, e não duplicado:
+  - na conta: mesmo valor com data a até 3 dias;
+  - no cartão: mesmo cartão, valor, parcela NN/MM e mês de vencimento.
+- **Reimportar a planilha** substitui só as linhas vindas dela. O que veio do banco, o que foi lançado à mão e as recategorizações ficam.
+
+Validação: o teste `test/real.test.ts` confere que, com a planilha real, o app reproduz **no centavo** as entradas, saídas e saldo final do REALIZADO do CAIXA MENSAL de jan a set/26. O teste roda só localmente, com o arquivo em `test/fixtures/real/caixa.xlsx`, pasta que o git ignora.
+
+## Publicar na Vercel
+
+1. **Importe o repositório** na Vercel: *Add New → Project*. O framework (Next.js) é detectado sozinho.
+2. **Banco de dados**: em *Storage*, crie um **Neon Postgres** e conecte ao projeto. Isso preenche `DATABASE_URL`. As tabelas são criadas no primeiro acesso.
+3. **Variáveis de ambiente** (*Settings → Environment Variables*), conforme o `.env.example`:
+   - `APP_PASSWORD`: a senha para entrar no app;
+   - `CRON_SECRET`: um texto aleatório longo. A Vercel o usa para chamar a sincronização diária (`vercel.json` agenda `/api/cron/sync` às 09:00 UTC, 06:00 em Brasília);
+   - `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` (próximo passo);
+   - opcional: `PLUGGY_WEBHOOK_SECRET`, para receber transações novas assim que a Pluggy as coleta.
+4. **Deploy**. Abra o app, entre com a senha e vá em **Dados & bancos**:
+   1. **Importar planilha**: baixe o CAIXA 2026 do Google Sheets (*Arquivo → Fazer download → .xlsx*). Isso traz o histórico, o previsto, o saldo inicial e as regras.
+   2. **Conectar banco**: escolha Itaú e autorize no app do banco. Repita para o Nubank.
+   3. Confira os **nomes dos cartões**. Eles devem ser iguais aos da coluna CARTÃO da planilha (“Itaú Black”, “Nubank”). O app já sugere esses nomes.
+
+### Sobre a Pluggy (Open Finance)
+Pessoa física não acessa diretamente as APIs do Open Finance Brasil. É preciso um agregador autorizado pelo Banco Central, e a Pluggy é um deles. Crie uma conta em [dashboard.pluggy.ai](https://dashboard.pluggy.ai), crie uma aplicação e copie *Client ID* e *Client Secret*. A Pluggy tem um ambiente de testes (*sandbox*, habilitado aqui com `NEXT_PUBLIC_PLUGGY_SANDBOX=1`). O acesso a dados reais depende do plano contratado. **Confira preços e condições para uso pessoal no site da Pluggy antes de conectar suas contas.** O consentimento dado no app do banco vale por até 12 meses. Quando expira, use **Reautorizar**.
+
+O app só **lê** dados: extratos, faturas, saldos e limites. As credenciais bancárias nunca passam pelo app; a autorização acontece no ambiente do banco.
+
+## Rodar localmente
+
+```bash
+npm install
+npm run dev          # http://localhost:3000 — sem DATABASE_URL usa PGlite em ./.data/pglite
+npm test             # testes (lógica, mapeamento Pluggy, conciliação e banco em memória)
+npm run typecheck
+```
+
+Sem `APP_PASSWORD`, o acesso local é livre. Para testar com a planilha real, coloque o arquivo em `test/fixtures/real/caixa.xlsx`. Essa pasta nunca vai para o git.
 
 ## Estrutura
 
 ```
-public/             ← o site (é isto que vai para o Vercel)
-  index.html        UI (4 abas, tema claro/escuro, mobile-first)
-  app.js            estado, abas, pendências, export, painel de conciliação
-  engine.js         engine de referência + parsers SheetJS + export (roda no browser e no Node)
-test/
-  engine.test.js    testes da engine (critérios de aceitação)
-  make-fixtures.js  gera arquivos SINTÉTICOS no layout real do Itaú/CAIXA 2026
-  fixtures/         base.xlsx, extrato.xls, fatura.xlsx sintéticos (dados fictícios)
-vercel.json         deploy estático (sem build) + cabeçalhos de segurança
+src/
+  app/(app)/          páginas: painel, fluxo, lancamentos, cartoes, insights, conexoes
+  app/api/            connect-token e webhook da Pluggy, cron de sincronização, exportação .xlsx
+  app/actions.ts      server actions (importar, categorizar, previsto, sincronizar…)
+  lib/
+    planilha.ts       leitura/exportação no layout CAIXA 2026
+    finance.ts        fluxo mensal (CAIXA MENSAL), faturas, parcelados, projeção
+    insights.ts       geração de insights e detecção de recorrentes
+    categorize.ts     regras, dicionários e mapeamento de categorias da Pluggy
+    pluggy-map.ts     transações Pluggy → lançamentos (vencimento, parcelas, projeções)
+    reconcile.ts      conciliação banco × planilha
+    sync.ts           sincronização com a Pluggy
+    db.ts / repo.ts   Postgres (Neon) / PGlite local
+  proxy.ts            proteção por senha (cookie assinado)
+public/conciliador/   conciliador estático antigo (100% no navegador), em /conciliador
+legacy/               testes e README do conciliador antigo
 ```
-
-O SheetJS vem do CDN: `cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5`.
-
-## Rodar local
-
-```bash
-npm install        # só para os testes (instala o SheetJS no Node)
-npm test           # roda a engine contra as fixtures
-npm start          # serve public/ em http://localhost:3000
-```
-
-Qualquer servidor estático serve, por exemplo `python3 -m http.server -d public 3000`. Abrir o `index.html` direto (file://) também funciona na maioria dos navegadores.
-
-### Testar com os seus arquivos reais
-
-Coloque os arquivos em `test/fixtures/real/` (a pasta está no `.gitignore` e **nunca** vai para o repositório):
-
-```
-test/fixtures/real/base.xlsx       ← CAIXA 2026 CLAUDE - melhorado.xlsx
-test/fixtures/real/extrato.xls     ← ou extrato.xlsx
-test/fixtures/real/fatura.xlsx
-```
-
-Depois rode `npm test`. O teste "aceitação — arquivos reais" confere os números da especificação: 23 lançamentos novos na conta, 4 duplicados, 3 recebimentos, 2 excluídos, cerca de 38 parcelas, saldo de R$ 2.984,77 e idempotência. Sem esses arquivos, o teste é pulado.
-
-## Publicar no Vercel
-
-1. Suba este repositório no GitHub.
-2. No Vercel: **Add New → Project → Import** o repositório. O `vercel.json` já define `outputDirectory: public` e desliga o build. Não é preciso configurar nada.
-3. Clique em **Deploy**.
-
-Pela CLI: `npx vercel --prod` na raiz do projeto.
-
-## Como usar
-
-1. **Importar → Planilha-base** (uma vez): baixe o CAIXA 2026 do Google Sheets (*Arquivo → Fazer download → .xlsx*) e solte aqui. O app lê as abas `CASH`, `CARTÃO`, `Apoio` e `Regras` e mostra "histórico: N lançamentos". Recarregue a base sempre que a planilha mudar muito.
-2. **Extrato** (.xls/.xlsx do Itaú) e/ou **Fatura** (.xlsx, a fatura aberta).
-3. **Conciliar**. O resumo mostra as parcelas do cartão (a série completa, da parcela atual até a última), os lançamentos da conta, as pendências e os recebimentos. Também lista o que foi excluído de propósito: o pagamento da fatura anterior e o débito da fatura no extrato.
-4. **Pendências**: escolha o subgrupo (lista da aba Apoio) ou o destino do recebimento. O item sai da fila. Com "Lembrar" marcado, a mesma descrição passa a ser categorizada sozinha nas próximas vezes.
-5. **Copiar lançamentos**: cole no Google Sheets **na coluna C** da aba correspondente (blocos CARTÃO e CASH). As colunas A/B continuam com as fórmulas da planilha. Se o navegador bloquear o clipboard, use **Ver texto**. **Baixar .xlsx** gera um arquivo com as abas CARTÃO e CASH (e RECEBIMENTOS, quando houver).
-6. **Conciliação**: digite o saldo final da planilha (B). O painel soma os recebimentos não lançados e a fatura não paga, e mostra **Não conciliado** em verde (|diferença| < R$ 0,50) ou em vermelho.
-
-### Regras de deduplicação
-
-- Cartão: `valor | parcela NN/MM | ano-mês do vencimento`. Conta: `data | valor`.
-- A conferência usa o histórico da base **e** as conciliações já **exportadas** (copiadas ou baixadas). Reimportar os mesmos arquivos depois de exportar gera 0 lançamentos novos.
-- Antes de exportar, conciliar de novo **substitui** a rodada anterior. Assim dá para acrescentar a fatura depois do extrato sem perder nada. **Desfazer conciliação** tira da memória as chaves da última rodada.
-- **Apagar dados salvos** (no rodapé) limpa a base, a memória, as regras aprendidas e a última conciliação.

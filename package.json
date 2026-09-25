@@ -1,15 +1,34 @@
 {
-  "name": "conciliador-caixa-2026",
-  "version": "1.0.0",
+  "name": "financeiro-pessoal",
+  "version": "2.0.0",
   "private": true,
-  "description": "Conciliação local (no navegador) de extrato e fatura Itaú com a planilha CAIXA 2026",
+  "description": "Fluxo de caixa pessoal (CAIXA 2026) com Open Finance via Pluggy — Next.js na Vercel",
   "scripts": {
-    "test": "node --test test/engine.test.js",
-    "fixtures": "node test/make-fixtures.js",
-    "start": "npx --yes serve public -l 3000"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:legacy": "node --test legacy/test/engine.test.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "next": "^16.3.6",
+    "pluggy-sdk": "^0.90.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-pluggy-connect": "^2.12.0",
+    "recharts": "^3.10.1",
+    "server-only": "^0.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "xlsx": "0.18.5"
-  },
-  "license": "UNLICENSED"
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.2"
+  }
 }

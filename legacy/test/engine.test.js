@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const XLSX = require('xlsx');
-const E = require('../public/engine.js');
+const E = require('../../public/conciliador/engine.js');
 const { write } = require('./make-fixtures.js');
 
 function stateFrom(base) {

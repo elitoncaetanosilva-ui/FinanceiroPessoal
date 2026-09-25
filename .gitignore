@@ -1,6 +1,14 @@
 node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.env
+.env*.local
+.vercel
+# banco local de desenvolvimento (PGlite)
+.data/
 # arquivos financeiros reais — nunca versionar
 test/fixtures/real/
+legacy/test/fixtures/real/
 *.real.xls
 *.real.xlsx
-.vercel
