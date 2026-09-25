@@ -1,0 +1,15 @@
+{
+  "name": "conciliador-caixa-2026",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Conciliação local (no navegador) de extrato e fatura Itaú com a planilha CAIXA 2026",
+  "scripts": {
+    "test": "node --test test/engine.test.js",
+    "fixtures": "node test/make-fixtures.js",
+    "start": "npx --yes serve public -l 3000"
+  },
+  "devDependencies": {
+    "xlsx": "0.18.5"
+  },
+  "license": "UNLICENSED"
+}

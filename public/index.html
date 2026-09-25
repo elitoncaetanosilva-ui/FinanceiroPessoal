@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Conciliador CAIXA 2026</title>
+<meta name="description" content="Conciliação local de extrato e fatura Itaú com a planilha CAIXA 2026. Nada sai do navegador.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M9 17l5 5 9-11' stroke='white' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f0f2f5; --line:#e2e5ea; --text:#15191f; --muted:#5d6673; --faint:#8a929e;
+  --accent:#0f766e; --accent-ink:#ffffff; --accent-soft:#e3f3f1;
+  --ok:#157f3b; --ok-soft:#e5f5ea; --bad:#b42318; --bad-soft:#fdecea; --warn:#9a5b00; --warn-soft:#fff4e0;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1116; --surface:#161b22; --surface-2:#1d242d; --line:#2a323c; --text:#e6e9ee; --muted:#9aa4b1; --faint:#6f7a87;
+    --accent:#2dd4bf; --accent-ink:#04201d; --accent-soft:#113532;
+    --ok:#4ade80; --ok-soft:#10301d; --bad:#f87171; --bad-soft:#3a1616; --warn:#fbbf24; --warn-soft:#352711;
+    --shadow:none; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1116; --surface:#161b22; --surface-2:#1d242d; --line:#2a323c; --text:#e6e9ee; --muted:#9aa4b1; --faint:#6f7a87;
+  --accent:#2dd4bf; --accent-ink:#04201d; --accent-soft:#113532;
+  --ok:#4ade80; --ok-soft:#10301d; --bad:#f87171; --bad-soft:#3a1616; --warn:#fbbf24; --warn-soft:#352711;
+  --shadow:none; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.45 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.num,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+button,select,input{font:inherit;color:inherit}
+.wrap{max-width:920px;margin:0 auto;padding:0 16px 48px}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar{max-width:920px;margin:0 auto;padding:12px 16px 0;display:flex;align-items:center;gap:10px}
+.bar h1{font-size:16px;font-weight:700;margin:0;letter-spacing:-.01em}
+.bar .sub{font-size:12px;color:var(--muted)}
+.bar .sp{flex:1}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:8px;width:34px;height:34px;display:grid;place-items:center;cursor:pointer}
+.tabs{max-width:920px;margin:0 auto;padding:8px 16px 0;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.tabs button{border:0;background:none;padding:10px 9px;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;white-space:nowrap;font-weight:500;display:flex;align-items:center;gap:6px}
+.tabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.pill{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--surface-2);color:var(--muted);font-size:12px;display:inline-grid;place-items:center}
+.pill.hot{background:var(--warn-soft);color:var(--warn)}
+section[hidden]{display:none}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:24px 0 10px;font-weight:600}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.drops{display:grid;gap:10px;margin-top:16px}
+@media (min-width:720px){.drops{grid-template-columns:repeat(3,1fr)}}
+.drop{position:relative;padding:14px;border:1.5px dashed var(--line);border-radius:12px;background:var(--surface);cursor:pointer;transition:border-color .15s,background .15s;display:flex;flex-direction:column;gap:6px;min-height:118px}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop.done{border-style:solid;border-color:var(--accent)}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.drop .step{font-size:12px;color:var(--faint);font-weight:600}
+.drop .ttl{font-weight:600}
+.drop .hint{font-size:13px;color:var(--muted)}
+.drop .st{font-size:13px;color:var(--accent);font-weight:500;margin-top:auto}
+.drop .st.err{color:var(--bad)}
+.drop .x{position:relative;z-index:2;align-self:flex-start;border:0;background:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:0}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:10px 14px;cursor:pointer;font-weight:500}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.ghost{background:none}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media (min-width:720px){.kpis{grid-template-columns:repeat(4,1fr)}}
+.kpi{padding:12px 14px}
+.kpi .v{font-size:24px;font-weight:600;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:12px;color:var(--muted)}
+.kpi .s{font-size:12px;color:var(--faint)}
+.note{font-size:13px;color:var(--muted);margin:10px 0 0}
+.banner{padding:10px 12px;border-radius:10px;font-size:13px;margin-top:12px}
+.banner.warn{background:var(--warn-soft);color:var(--warn)}
+.banner.info{background:var(--surface-2);color:var(--muted)}
+.list{overflow:hidden}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 14px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row .d{font-weight:500;overflow-wrap:anywhere}
+.row .m{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.row .v{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;font-weight:500}
+.row .c{grid-column:1/-1}
+.grp{padding:10px 14px;background:var(--surface-2);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--line)}
+.grp:first-child{border-top:0}
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:12px;background:var(--accent-soft);color:var(--accent);border:0;cursor:pointer;font-weight:500}
+.chip.blank{background:var(--warn-soft);color:var(--warn)}
+.chip.inc{background:var(--ok-soft);color:var(--ok)}
+.tag{font-size:11px;padding:1px 6px;border-radius:5px;background:var(--surface-2);color:var(--muted)}
+.series{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.series span{font-size:11px;font-family:"IBM Plex Mono",monospace;padding:1px 6px;border-radius:5px;background:var(--surface-2);color:var(--muted)}
+select.cat{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);margin-top:6px}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);margin-top:10px}
+.form{padding:4px 0}
+.f{display:grid;grid-template-columns:32px 1fr 150px;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.f:first-child{border-top:0}
+.f .op{font-family:"IBM Plex Mono",monospace;color:var(--muted);text-align:center;font-weight:600}
+.f .lb{font-size:14px}
+.f .lb small{display:block;color:var(--faint);font-size:12px}
+.f input{width:100%;text-align:right;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.f input[readonly]{background:var(--surface-2);border-color:transparent}
+.f.tot{background:var(--surface-2)}
+.result{margin-top:14px;padding:16px;border-radius:12px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.result.ok{background:var(--ok-soft);color:var(--ok)}
+.result.bad{background:var(--bad-soft);color:var(--bad)}
+.result .big{white-space:nowrap;font-size:26px;font-weight:700;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px)}
+.toast.on{opacity:1}
+textarea.tsv{width:100%;min-height:160px;margin-top:10px;font:12px/1.4 "IBM Plex Mono",monospace;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+footer{font-size:12px;color:var(--faint);margin-top:32px}
+footer button{border:0;background:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0;font-size:12px}
+@media (max-width:420px){.f{grid-template-columns:24px 1fr 120px;padding:10px}.tabs button{padding:10px 7px;font-size:14px}.result .big{font-size:21px}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="bar">
+    <div>
+      <h1>Conciliador CAIXA 2026</h1>
+      <div class="sub">Itaú · conta + cartão · processado só no seu navegador</div>
+    </div>
+    <div class="sp"></div>
+    <button class="iconbtn" id="theme" title="Alternar tema" aria-label="Alternar tema">◐</button>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="importar" aria-selected="true">Importar</button>
+    <button role="tab" data-tab="lancamentos" aria-selected="false">Lançamentos <span class="pill" id="pill-lanc">0</span></button>
+    <button role="tab" data-tab="pendencias" aria-selected="false">Pendências <span class="pill" id="pill-pend">0</span></button>
+    <button role="tab" data-tab="conciliacao" aria-selected="false">Conciliação</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <section id="tab-importar">
+    <div class="drops">
+      <label class="drop" id="drop-base">
+        <input type="file" accept=".xlsx,.xls" data-kind="base">
+        <span class="step">1 · UMA VEZ</span>
+        <span class="ttl">Planilha-base</span>
+        <span class="hint">CAIXA 2026 (.xlsx) — histórico, categorias e regras</span>
+        <span class="st"></span>
+      </label>
+      <label class="drop" id="drop-extrato">
+        <input type="file" accept=".xls,.xlsx" data-kind="extrato">
+        <span class="step">2</span>
+        <span class="ttl">Extrato da conta</span>
+        <span class="hint">Itaú, aba Lançamentos (.xls ou .xlsx)</span>
+        <span class="st"></span>
+      </label>
+      <label class="drop" id="drop-fatura">
+        <input type="file" accept=".xlsx,.xls" data-kind="fatura">
+        <span class="step">3</span>
+        <span class="ttl">Fatura do cartão</span>
+        <span class="hint">Itaú, fatura aberta (.xlsx)</span>
+        <span class="st"></span>
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btn-conciliar" disabled>Conciliar</button>
+    </div>
+    <p class="note" id="conciliar-hint">Carregue a planilha-base e ao menos um arquivo (extrato ou fatura).</p>
+
+    <div id="resumo" hidden>
+      <h2>Resumo da conciliação</h2>
+      <div class="kpis">
+        <div class="card kpi"><div class="l">Parcelas do cartão</div><div class="v" id="k-parc">0</div><div class="s" id="k-parc-s"></div></div>
+        <div class="card kpi"><div class="l">Lançamentos da conta</div><div class="v" id="k-cash">0</div><div class="s" id="k-cash-s"></div></div>
+        <div class="card kpi"><div class="l">Pendências</div><div class="v" id="k-pend">0</div><div class="s">a classificar</div></div>
+        <div class="card kpi"><div class="l">Recebimentos</div><div class="v" id="k-rec">0</div><div class="s" id="k-rec-s"></div></div>
+      </div>
+      <div id="excluidos"></div>
+      <div class="actions">
+        <button class="btn primary" id="btn-copiar">Copiar lançamentos</button>
+        <button class="btn" id="btn-baixar">Baixar .xlsx</button>
+        <button class="btn ghost" id="btn-vertsv">Ver texto</button>
+        <button class="btn ghost" id="btn-desfazer" title="Remove da memória as chaves desta conciliação">Desfazer conciliação</button>
+      </div>
+      <textarea class="tsv" id="tsv" hidden readonly></textarea>
+      <p class="note">O texto copiado tem blocos CARTÃO e CASH começando na coluna C (DATA COMPRA). As colunas A/B (MÊS_COMPRA/MÊS_VENC) continuam com as fórmulas da planilha. A Parcela vai com apóstrofo para o Sheets não virar data.</p>
+    </div>
+  </section>
+
+  <section id="tab-lancamentos" hidden>
+    <h2>Cartão · parcelas novas</h2>
+    <div class="card list" id="list-cartao"></div>
+    <h2>Conta · lançamentos novos</h2>
+    <div class="card list" id="list-cash"></div>
+    <h2>Recebimentos</h2>
+    <div class="card list" id="list-rec"></div>
+    <p class="note">Toque numa categoria para devolvê-la às Pendências.</p>
+  </section>
+
+  <section id="tab-pendencias" hidden>
+    <label class="chk"><input type="checkbox" id="lembrar" checked> Lembrar a escolha para esta descrição nas próximas conciliações</label>
+    <h2 id="pend-h">Pendências</h2>
+    <div class="card list" id="list-pend"></div>
+  </section>
+
+  <section id="tab-conciliacao" hidden>
+    <h2>Saldo · competência × caixa</h2>
+    <p class="note" style="margin-top:0">Saldo do banco = saldo final da planilha + faturas não pagas (+ o que ainda não foi lançado).</p>
+    <div class="card form" style="margin-top:12px">
+      <div class="f"><span class="op">A</span><span class="lb">Saldo do banco<small id="c-banco-ref">leia um extrato</small></span><input id="c-banco" inputmode="decimal"></div>
+      <div class="f"><span class="op">B</span><span class="lb">Saldo final da planilha<small>digite o saldo do mês no CAIXA 2026</small></span><input id="c-planilha" inputmode="decimal" placeholder="0,00"></div>
+      <div class="f tot"><span class="op">=</span><span class="lb">Diferença a apurar (A − B)</span><input id="c-dif" readonly tabindex="-1"></div>
+      <div class="f"><span class="op">+</span><span class="lb">Recebimentos ainda não lançados<small id="c-rec-ref"></small></span><input id="c-rec" inputmode="decimal"></div>
+      <div class="f"><span class="op">+</span><span class="lb">Faturas de cartão não pagas<small id="c-fat-ref"></small></span><input id="c-fat" inputmode="decimal"></div>
+      <div class="f"><span class="op">±</span><span class="lb">Diferença de saldo inicial<small>planilha × banco</small></span><input id="c-ini" inputmode="decimal" placeholder="0,00"></div>
+      <div class="f"><span class="op">±</span><span class="lb">Outros ajustes</span><input id="c-out" inputmode="decimal" placeholder="0,00"></div>
+      <div class="f tot"><span class="op">=</span><span class="lb">Total explicado</span><input id="c-exp" readonly tabindex="-1"></div>
+    </div>
+    <div class="result" id="c-result"><div><div style="font-size:13px;font-weight:600">Não conciliado</div><div id="c-msg" style="font-size:13px"></div></div><div class="big" id="c-nc">—</div></div>
+    <div id="c-falta"></div>
+  </section>
+
+  <footer>
+    Tudo é lido e processado localmente; nenhum dado sai do dispositivo. A planilha-mestra nunca é alterada.
+    <span id="mem"></span> · <button id="btn-esquecer">Apagar dados salvos neste navegador</button>
+  </footer>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

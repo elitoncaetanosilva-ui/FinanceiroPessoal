@@ -1,0 +1,6 @@
+node_modules/
+# arquivos financeiros reais — nunca versionar
+test/fixtures/real/
+*.real.xls
+*.real.xlsx
+.vercel
