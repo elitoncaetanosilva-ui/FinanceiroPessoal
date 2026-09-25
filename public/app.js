@@ -147,14 +147,23 @@
   };
   const persistLast = () => { if (S.last) save(K.last, S.last); };
 
-  $('#btn-desfazer').onclick = () => {
-    const lr = S.memo.lastRun;
-    if (!lr || !confirm('Desfazer esta conciliação? As chaves geradas saem da memória e uma nova conciliação volta a gerar esses lançamentos.')) return;
+  // Confirmação em dois toques (sem confirm(), que alguns frames bloqueiam).
+  function twoStep(btn, ask, action) {
+    const label = btn.textContent; let t;
+    btn.addEventListener('click', () => {
+      if (btn.dataset.armed) { clearTimeout(t); delete btn.dataset.armed; btn.textContent = label; action(); return; }
+      btn.dataset.armed = '1'; btn.textContent = ask;
+      t = setTimeout(() => { delete btn.dataset.armed; btn.textContent = label; }, 4000);
+    });
+  }
+
+  twoStep($('#btn-desfazer'), 'Toque de novo para desfazer', () => {
+    if (!S.memo.lastRun) return;
     dropLastRunKeys();
     save(K.memo, S.memo);
     S.last = null; drop(K.last);
     renderAll(); toast('Conciliação desfeita.');
-  };
+  });
 
   // ---------- pendências ----------
   function pendentes() {
@@ -312,11 +321,10 @@
     $('#pill-lanc').textContent = r ? r.cardInstall + r.cashNew.length : 0;
     const pp = $('#pill-pend'); pp.textContent = nPend; pp.classList.toggle('hot', nPend > 0);
   }
-  $('#btn-esquecer').onclick = () => {
-    if (!confirm('Apagar do navegador a planilha-base, a memória de conciliações, as regras aprendidas e a última conciliação?')) return;
+  twoStep($('#btn-esquecer'), 'Toque de novo para apagar base, memória, regras aprendidas e última conciliação', () => {
     Object.values(K).forEach(k => k !== K.theme && drop(k));
     location.reload();
-  };
+  });
 
   if (!window.XLSX) setDrop('base', 'SheetJS não carregou (sem internet?). Recarregue a página.', 'err');
   renderAll();
