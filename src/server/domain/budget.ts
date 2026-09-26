@@ -33,7 +33,7 @@ export async function budgetItems(ctx: Ctx, year: number) {
 }
 
 export async function setBudgetValues(ctx: Ctx, year: number, categoryId: string, months: number[], amountCents: number) {
-  if (!Number.isInteger(amountCents) || amountCents < 0) throw new Error('Valor de orçamento inválido.');
+  if (!Number.isInteger(amountCents)) throw new Error('Valor de orçamento inválido.');
   const cat = await ctx.q.query('select 1 from categories where id=$1 and user_id=$2', [categoryId, ctx.userId]);
   if (!cat[0]) throw new Error('Categoria inválida.');
   const budgetId = await ensureBudget(ctx, year);
@@ -79,7 +79,7 @@ export interface BudgetView {
   month: ISODate;
   sections: { section: 'IN' | 'OUT'; label: string; lines: BudgetLine[]; total: Omit<BudgetLine, 'category' | 'isGroup' | 'children'> }[];
   spending: { budget: number; realized: number; planned: number; projected: number; deviation: number }; // despesas + dívidas
-  unclassified: { realized: number; planned: number };
+  unclassified: { realized: number; planned: number; outflow: number; inflow: number };
 }
 
 /** Valor de uma linha no sentido da seção (entradas +, saídas +). Pernas em contas de investimento não contam para transferências/aportes. */
@@ -93,9 +93,13 @@ export async function budgetView(ctx: Ctx, month: ISODate, filters: { accountId?
   const { y, m: mo } = parts(m);
   const [idx, items, totals] = await Promise.all([categoryIndex(ctx), budgetItems(ctx, y), categoryTotals(ctx, m, m, filters)]);
   const real = new Map<string, number>(), plan = new Map<string, number>();
-  let unR = 0, unP = 0;
+  let unR = 0, unP = 0, unOut = 0, unIn = 0;
   for (const r of totals) {
-    if (!r.category_id) { if (r.status === 'REALIZED') unR += -r.amount; else unP += -r.amount; continue; }
+    if (!r.category_id) {
+      if (r.status === 'REALIZED') unR += -r.amount; else unP += -r.amount;
+      if (r.amount < 0) unOut += -r.amount; else unIn += r.amount;
+      continue;
+    }
     const target = r.status === 'REALIZED' ? real : plan;
     target.set(r.category_id, (target.get(r.category_id) ?? 0) + contribution(r));
   }
@@ -135,5 +139,5 @@ export async function budgetView(ctx: Ctx, month: ISODate, filters: { accountId?
   }
   spending.projected = spending.realized + spending.planned;
   spending.deviation = spending.projected - spending.budget;
-  return { month: m, sections, spending, unclassified: { realized: unR, planned: unP } };
+  return { month: m, sections, spending, unclassified: { realized: unR, planned: unP, outflow: unOut, inflow: unIn } };
 }

@@ -35,7 +35,7 @@ export default async function Regras() {
       <Card>
         <h2 className="mb-2 font-semibold">Nova regra</h2>
         <ActionForm action={saveRuleAction} submit="Criar regra">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Descrição contém…"><input name="pattern" required className={inputClass} placeholder="SUPERMERCADO ZAFFARI" /></Field>
             <Field label="Tipo"><select name="match_type" className={inputClass}><option value="CONTAINS">Contém</option><option value="STARTS_WITH">Começa com</option><option value="EXACT">Igual a</option><option value="REGEX">Expressão regular</option></select></Field>
             <Field label="Sentido"><select name="direction" className={inputClass}><option value="">Entradas e saídas</option><option value="OUT">Só saídas</option><option value="IN">Só entradas</option></select></Field>

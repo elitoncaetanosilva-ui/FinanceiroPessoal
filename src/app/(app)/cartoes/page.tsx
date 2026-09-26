@@ -19,7 +19,7 @@ export default async function Cartoes() {
     <div>
       <PageHeader title="Cartões" actions={<ButtonLink href="/cartoes/novo" size="sm"><Plus size={16} /> Novo cartão</ButtonLink>} />
       {cards.length === 0 && <Empty title="Nenhum cartão cadastrado" action={<ButtonLink href="/cartoes/novo">Cadastrar cartão</ButtonLink>}>Informe limite, fechamento e vencimento para o app calcular as faturas.</Empty>}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {cards.map(c => (
           <Card key={c.id}>
             <Link href={`/cartoes/${c.id}`} className="block">

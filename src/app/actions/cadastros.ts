@@ -7,6 +7,8 @@ import { isISODate } from '@/lib/dates';
 import { norm } from '@/lib/text';
 import { safe, writeTx, type ActionResult } from '@/server/context';
 import { audit } from '@/server/domain/audit';
+import { assignPendingBatches } from '@/server/import/pipeline';
+import { detectCardPayments } from '@/server/domain/movements';
 import { DomainError } from '@/server/domain/types';
 
 const opt = (v: FormDataEntryValue | null) => { const s = String(v ?? '').trim(); return s === '' ? null : s; };
@@ -63,6 +65,7 @@ export async function saveAccountAction(_: ActionResult, fd: FormData): Promise<
         `insert into accounts(user_id, name, type, institution_id, branch, number, opening_balance_cents, opening_balance_date, in_available_balance, color)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`, [ctx.userId, ...vals]);
       await audit(ctx, 'account', row[0].id, 'CREATE');
+      await assignPendingBatches(ctx);
       return row[0].id;
     });
   });
@@ -120,6 +123,7 @@ export async function saveCardAction(_: ActionResult, fd: FormData): Promise<Act
           const nv = (data as Record<string, unknown>)[col];
           if (String(old[col]) !== String(nv)) await audit(ctx, 'card', id, 'UPDATE', { field: f, old: old[col], new: nv });
         }
+        await detectCardPayments(ctx);
         // faturas futuras (ainda sem data real informada por arquivo) acompanham os novos dias
         if (old.closing_day !== data.closing_day || old.due_day !== data.due_day) {
           const { computeStatementDates } = await import('@/server/domain/statements');
@@ -136,6 +140,8 @@ export async function saveCardAction(_: ActionResult, fd: FormData): Promise<Act
         `insert into credit_cards(user_id, name, institution_id, brand, last4, extra_last4, limit_cents, closing_day, due_day, payment_account_id, payment_patterns, color)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`, [ctx.userId, ...vals]);
       await audit(ctx, 'card', row[0].id, 'CREATE');
+      await detectCardPayments(ctx);
+      await assignPendingBatches(ctx);
       return row[0].id;
     });
   });

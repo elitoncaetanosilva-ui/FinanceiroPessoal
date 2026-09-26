@@ -56,7 +56,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         <MonthNav month={d.month} basePath="/" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Resultado do mês */}
         <Card>
           <CardTitle action={<Link href={`/analises?mes=${mk}`} className="text-sm text-primary">Análises</Link>}>Resultado do mês</CardTitle>
@@ -129,7 +129,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         {d.cards.length === 0 ? (
           <p className="text-sm text-muted">Nenhum cartão cadastrado. <Link className="text-primary" href="/cartoes/novo">Cadastrar</Link></p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {d.cards.map(c => {
               const st = c.closed ?? c.current;
               return (
@@ -158,7 +158,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         {d.futureStatements > 0 && <p className="mt-3 text-sm text-muted">Faturas futuras já comprometidas: <Money cents={d.futureStatements} strong /></p>}
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardTitle>Gastos no cartão</CardTitle>
           <Link href={`/movimentos?mes=${mk}&natureza=EXPENSE&portador=cartao`} className="text-2xl font-bold"><Money cents={d.realized.cardSpend} /></Link>

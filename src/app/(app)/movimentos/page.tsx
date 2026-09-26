@@ -52,7 +52,7 @@ export default async function Movimentos({ searchParams }: { searchParams: Promi
 
       <details className="mb-4 rounded-2xl border border-border bg-surface p-3" open={activeFilters.length > 0}>
         <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium"><SlidersHorizontal size={16} /> Filtros {activeFilters.length > 0 && `(${activeFilters.length})`}</summary>
-        <form action="/movimentos" className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <form action="/movimentos" className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {sp.mes && <input type="hidden" name="mes" value={sp.mes} />}
           {sp.q && <input type="hidden" name="q" value={sp.q} />}
           <select name="conta" defaultValue={sp.conta ?? ''} className={inputClass}><option value="">Todas as contas</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>

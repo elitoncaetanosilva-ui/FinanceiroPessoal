@@ -191,6 +191,28 @@ describe('importação — cartão, parcelas e pagamento de fatura', () => {
   });
 });
 
+describe('importação — extrato antes do cartão existir', () => {
+  it('ao cadastrar o cartão, o débito da fatura no extrato vira pagamento (nunca despesa) e liga ao crédito da fatura', async () => {
+    const env = await setup();
+    const acc = await account(env, 'Itaú CC', 'CHECKING', 0, '2026-08-31');
+    await env.db.query(`update accounts set branch='1234', number='01234-5' where id=$1`, [acc]);
+    const f = itauExtrato([['08/09/2026', 'FATURA ITAU UNICLASS MC BLA', -300]], 0);
+    const r = await importFile(env, 'extrato.xls', f.bytes);
+    expect(r.rows[0].row_kind).toBe('NORMAL');                      // sem cartão cadastrado ainda
+    const itau = await card(env, 'Itaú Black', 30, 7, 1_000_000, acc, ['FATURA ITAU']);
+    await env.db.query(`update credit_cards set last4='1111' where id=$1`, [itau]);
+    await inTx(env, ctx => M.detectCardPayments(ctx));               // o que o cadastro do cartão dispara
+    const k = await env.db.query<{ kind: string }>(`select kind from movements where account_id=$1`, [acc]);
+    expect(k[0].kind).toBe('CARD_PAYMENT');
+    const fat = itauFatura([['2026-09-08', 'Pagamento Debito Automatico', null, -300], ['2026-09-20', 'Loja', null, 50]], '2026-10-07');
+    const r2 = await importFile(env, 'fatura.xlsx', fat);
+    expect(r2.rows.find(x => x.description.startsWith('Pagamento'))!.status).toBe('POSSIBLE_DUPLICATE');   // lado do cartão criado pelo sistema
+    expect(await count(env, `kind='CARD_PAYMENT'`)).toBe(2);
+    const e = summarize(await categoryTotals(env.ctx, '2026-01-01', '2027-12-01'), 'ALL', new Set());
+    expect(e.unclassified).toBe(5000);                              // só a compra "Loja" está pendente
+  });
+});
+
 // ------------------------------------------------------------------ arquivos reais (opcional, fora do git)
 const REAL = path.join(__dirname, 'fixtures/real');
 const hasReal = fs.existsSync(path.join(REAL, 'Extrato_Conta_Corrente-250920262155.xls'));
@@ -227,5 +249,41 @@ describe.skipIf(!hasReal)('arquivos reais', () => {
       expect(again.result.imported + again.result.payments).toBe(0);
     }
     expect(await count(env)).toBe(total);
+  });
+});
+
+const hasCaixa = fs.existsSync(path.join(REAL, 'CAIXA_2026.xlsx'));
+describe.skipIf(!hasCaixa)('migração CAIXA 2026 (arquivo real)', () => {
+  it('reproduz o REALIZADO da planilha e é idempotente', async () => {
+    const { parseCaixa, applyCaixa } = await import('@/server/import/planilha');
+    const { budgetView } = await import('@/server/domain/budget');
+    const env = await setup();
+    const acc = await account(env, 'Itaú', 'CHECKING', -58695, '2026-08-31');
+    const itau = await card(env, 'Itaú Black', 30, 7, 2_000_000, acc);
+    const nu = await card(env, 'Nubank', 20, 27, 500_000, acc);
+    const p = parseCaixa(fs.readFileSync(path.join(REAL, 'CAIXA_2026.xlsx')));
+    expect(p.cardNames.sort()).toEqual(['Itaú Black', 'Nubank']);
+    const opts = { accountId: acc, cardMap: { 'Itaú Black': itau, Nubank: nu }, cashCutoff: '2026-08-01', cardCutoff: '2026-09-01', importHistory: true, importBudgets: true };
+    const r1 = await inTx(env, ctx => applyCaixa(ctx, p, opts));
+    expect(r1.unknown).toEqual([]);
+    // CAIXA MENSAL, jan/26: entradas realizadas 10.985,03; saídas realizadas 12.155,45; orçado saídas 10.596,00
+    const jan = await budgetView(env.ctx, '2026-01-01');
+    expect(jan.sections.find(s => s.section === 'IN')!.total.realized).toBe(1098503);
+    expect(jan.sections.find(s => s.section === 'OUT')!.total.realized).toBe(1215545);
+    expect(jan.sections.find(s => s.section === 'OUT')!.total.budget).toBe(1059600);
+    // todos os meses de jan a ago (valores da linha TOTAL do CAIXA MENSAL)
+    const OUT = [1215545, 993863, 1241248, 1270502, 991677, 1336599, 1068082, 1372535];
+    const IN = [1098503, 1118100, 1421245, 942484, 1106205, 1330219, 1262618, 987700];
+    for (let m = 1; m <= 8; m++) {
+      const v = await budgetView(env.ctx, `2026-0${m}-01`);
+      expect([m, v.sections.find(s => s.section === 'OUT')!.total.realized]).toEqual([m, OUT[m - 1]]);
+      expect([m, v.sections.find(s => s.section === 'IN')!.total.realized]).toEqual([m, IN[m - 1]]);
+    }
+    const n = await count(env);
+    await inTx(env, ctx => applyCaixa(ctx, p, opts));
+    expect(await count(env)).toBe(n);
+    // histórico antes do saldo inicial não altera o saldo
+    const bal = (await accountBalances(env.ctx)).find(a => a.id === acc)!;
+    expect(bal.balance_cents).toBe(-58695);
   });
 });

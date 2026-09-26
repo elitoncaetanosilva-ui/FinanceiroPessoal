@@ -21,7 +21,7 @@ export default function AccountForm({ values = {}, institutions, back, today }: 
     <ActionForm action={saveAccountAction}>
       {values.id && <input type="hidden" name="id" value={values.id} />}
       {back && <input type="hidden" name="back" value={back} />}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Nome da conta"><input name="name" required defaultValue={values.name} className={inputClass} placeholder="Ex.: Itaú conta corrente" /></Field>
         <Field label="Instituição">
           <select name="institution_id" defaultValue={values.institution_id ?? ''} className={inputClass}>

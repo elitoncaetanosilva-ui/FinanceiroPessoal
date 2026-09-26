@@ -104,7 +104,7 @@ export default function NewMovementForm({ initialTipo, accounts, cards, categori
             <span className="mb-1 block text-sm font-medium text-muted">Categoria</span>
             <CategoryPicker name="category_id" categories={categories} recentIds={recent} prefer={tipo === 'receita' ? 'IN' : 'OUT'} placeholder="Escolher (ou deixar para depois)" />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {holderSelect(tipo !== 'receita')}
             <Field label={tipo === 'cartao' ? 'Data da compra' : 'Data'} hint={date > todayFn() ? 'Data futura: fica como previsto.' : undefined}>
               <input name="date" type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass} required />
@@ -122,7 +122,7 @@ export default function NewMovementForm({ initialTipo, accounts, cards, categori
 
       {tipo === 'transferencia' && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="De"><select name="from" defaultValue={defaults.account ?? accounts[0]?.id} className={inputClass}>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
             <Field label="Para"><select name="to" defaultValue={accounts.find(a => a.id !== (defaults.account ?? accounts[0]?.id))?.id} className={inputClass}>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
           </div>
@@ -134,7 +134,7 @@ export default function NewMovementForm({ initialTipo, accounts, cards, categori
 
       {tipo === 'pagamento' && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Cartão"><select name="card_id" value={cardId} onChange={e => { setCardId(e.target.value); setStmt(''); }} className={inputClass}>{cards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
             <Field label="Fatura">
               <select name="statement_id" value={stmt} onChange={e => { setStmt(e.target.value); const s = statements.find(x => x.id === e.target.value); if (s && s.remaining > 0) setAmount(formatNum(s.remaining)); }} className={inputClass}>
@@ -151,7 +151,7 @@ export default function NewMovementForm({ initialTipo, accounts, cards, categori
 
       {tipo === 'ajuste' && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Conta"><select name="account_id" defaultValue={defaults.account ?? accounts[0]?.id} className={inputClass}>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
             <Field label="Data"><input name="date" type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass} /></Field>
           </div>

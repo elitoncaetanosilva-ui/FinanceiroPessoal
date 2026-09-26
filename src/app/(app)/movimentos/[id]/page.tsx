@@ -115,7 +115,7 @@ export default async function Movimento({ params, searchParams }: { params: Prom
           <ActionForm action={updateMovementAction}>
             <input type="hidden" name="id" value={id} />
             <input type="hidden" name="version" value={m.version} />
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Descrição" className="sm:col-span-2"><input name="description" defaultValue={m.description} className={inputClass} /></Field>
               <Field label="Valor (R$)" hint={splits.length > 1 ? 'Com rateio, altere o valor junto com o rateio.' : undefined}>
                 <input name="amount" inputMode="decimal" defaultValue={formatNum(Math.abs(m.amount_cents))} disabled={splits.length > 1 || !!m.link_id && false} className={inputClass} />

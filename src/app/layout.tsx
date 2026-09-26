@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   applicationName: 'Finanças',
   appleWebApp: { capable: true, title: 'Finanças', statusBarStyle: 'default' },
   formatDetection: { telephone: false },
-  icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
+  icons: { apple: '/icons/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = {

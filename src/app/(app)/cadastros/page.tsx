@@ -17,7 +17,7 @@ export default function Cadastros() {
   return (
     <div>
       <PageHeader title="Cadastros" subtitle="Tudo pode ser editado, ativado ou inativado. Itens com lançamentos nunca são apagados." />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {ITEMS.map(i => (
           <Link key={i.href} href={i.href} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 hover:bg-surface-2">
             <i.icon className="text-primary" size={24} />

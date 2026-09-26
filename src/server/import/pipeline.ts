@@ -439,6 +439,7 @@ export async function commitBatch(ctx: Ctx, batchId: string) {
   }
   for (const t of toLink) await M.classifyMovement(ctx, t.id, t.categoryId, { via: 'importação' });
   await bumpRuleHits(ctx, ruleHits);
+  created.payments += await M.detectCardPayments(ctx);
 
   // conferência de saldo e total da fatura
   const info = b.info;
@@ -508,3 +509,16 @@ export async function sameFileImported(ctx: Ctx, batchId: string) {
 }
 
 export { addDays, diffDays };
+
+/** Depois de cadastrar uma conta/cartão: identifica de novo os lotes em revisão que estavam sem portador. */
+export async function assignPendingBatches(ctx: Ctx) {
+  const drafts = await ctx.q.query<{ id: string; info: BatchInfo }>(
+    `select id, info from import_batches where user_id=$1 and status='DRAFT' and account_id is null and card_id is null and importer_id<>'caixa-planilha'`, [ctx.userId]);
+  for (const d of drafts) {
+    const p = d.info.parsed as ParsedFile;
+    const ident = await identifyHolder(ctx, { ...p, rows: [] });
+    const acc = p.kind === 'ACCOUNT' && ident.accountMatches.length === 1 ? ident.accountMatches[0] : null;
+    const card = p.kind === 'CARD' && ident.cardMatches.length === 1 ? ident.cardMatches[0] : null;
+    if (acc || card) await setBatchHolder(ctx, d.id, { accountId: acc, cardId: card });
+  }
+}

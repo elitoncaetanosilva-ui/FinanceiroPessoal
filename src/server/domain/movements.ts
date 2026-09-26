@@ -631,3 +631,26 @@ export async function autoRealizeInstallments(ctx: Ctx, today = todayFn()) {
 }
 
 export { addDays };
+
+/**
+ * Detecção retroativa de pagamentos de fatura: lançamentos de CONTA ainda sem categoria cuja descrição
+ * contém o padrão de pagamento de um cartão (ex.: extrato importado antes de o cartão existir).
+ * Converte em pagamento de fatura e liga ao lado do cartão — evita que virem "despesa" e dupliquem o gasto.
+ */
+export async function detectCardPayments(ctx: Ctx) {
+  const cards = await ctx.q.query<{ id: string; payment_patterns: string[] }>(
+    `select id, payment_patterns from credit_cards where user_id=$1 and is_active and cardinality(payment_patterns) > 0`, [ctx.userId]);
+  let n = 0;
+  for (const c of cards) {
+    for (const p of c.payment_patterns) {
+      if (!p || p.length < 4) continue;
+      const rows = await ctx.q.query<{ id: string }>(
+        `select m.id from movements m where m.user_id=$1 and m.account_id is not null and m.kind='NORMAL' and m.amount_cents < 0
+           and m.deleted_at is null and m.normalized_description like $2
+           and not exists (select 1 from movement_splits s where s.movement_id=m.id and s.category_id is not null)`,
+        [ctx.userId, `%${norm(p)}%`]);
+      for (const r of rows) { await makeAccountMovementCardPayment(ctx, r.id, c.id); n++; }
+    }
+  }
+  return n;
+}

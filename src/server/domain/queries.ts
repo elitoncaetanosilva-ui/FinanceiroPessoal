@@ -6,6 +6,7 @@ import type { Ctx, MovementKind, MovementSource, MovementStatus, Nature } from '
 export interface MovementFilters {
   month?: ISODate;                 // competência (YYYY-MM-01)
   from?: ISODate; to?: ISODate;    // intervalo de datas (campo `date`)
+  compFrom?: ISODate; compTo?: ISODate; // intervalo de competência (meses)
   text?: string;
   accountId?: string; cardId?: string; statementId?: string;
   categoryId?: string;             // categoria ou subcategoria
@@ -37,6 +38,8 @@ function where(f: MovementFilters, params: unknown[]) {
   if (f.month) w.push(`m.competence = ${p(monthStart(f.month))}`);
   if (f.from) w.push(`m.date >= ${p(f.from)}`);
   if (f.to) w.push(`m.date <= ${p(f.to)}`);
+  if (f.compFrom) w.push(`m.competence >= ${p(monthStart(f.compFrom))}`);
+  if (f.compTo) w.push(`m.competence <= ${p(monthStart(f.compTo))}`);
   if (f.text?.trim()) {
     const t = norm(f.text);
     const cents = /^[\d.,]+$/.test(f.text.trim()) ? Math.round(Number(f.text.trim().replace(/\./g, '').replace(',', '.')) * 100) : null;
@@ -119,8 +122,10 @@ export async function sumMovements(ctx: Ctx, f: MovementFilters) {
 
 export async function countPending(ctx: Ctx) {
   const r = await ctx.q.query<{ n: number }>(
-    `select count(distinct s.movement_id)::int as n from movement_splits s join movements m on m.id=s.movement_id
-     where s.user_id=$1 and s.category_id is null and m.deleted_at is null and m.status<>'CANCELLED'`,
+    `select count(*)::int as n from movements m
+     where m.user_id=$1 and m.deleted_at is null and m.status<>'CANCELLED' and m.kind in ('NORMAL','TRANSFER')
+       and exists (select 1 from movement_splits s where s.movement_id=m.id and s.category_id is null)
+       and not (m.status='PLANNED' and m.installment_group_id is not null)`,
     [ctx.userId],
   );
   return r[0].n;
@@ -132,7 +137,7 @@ export interface CatTotal { competence: ISODate; category_id: string | null; par
 export async function categoryTotals(ctx: Ctx, fromMonth: ISODate, toMonth: ISODate, f: { accountId?: string; cardId?: string } = {}): Promise<CatTotal[]> {
   return ctx.q.query<CatTotal>(
     `select m.competence, s.category_id, c.parent_id, c.nature, c.section, m.status,
-       sum(s.amount_cents) as amount, (m.card_id is not null) as on_card,
+       sum(s.amount_cents) as amount, (m.card_id is not null) as on_card, (s.amount_cents < 0) as is_out,
        coalesce(a.in_available_balance, true) as available_account
      from movement_splits s
      join movements m on m.id=s.movement_id
@@ -141,7 +146,7 @@ export async function categoryTotals(ctx: Ctx, fromMonth: ISODate, toMonth: ISOD
      where m.user_id=$1 and m.deleted_at is null and m.status in ('PLANNED','REALIZED')
        and m.competence between $2 and $3
        and ($4::uuid is null or m.account_id=$4) and ($5::uuid is null or m.card_id=$5)
-     group by m.competence, s.category_id, c.parent_id, c.nature, c.section, m.status, (m.card_id is not null), coalesce(a.in_available_balance, true)`,
+     group by m.competence, s.category_id, c.parent_id, c.nature, c.section, m.status, (m.card_id is not null), coalesce(a.in_available_balance, true), (s.amount_cents < 0)`,
     [ctx.userId, monthStart(fromMonth), monthStart(toMonth), f.accountId ?? null, f.cardId ?? null],
   );
 }
@@ -161,7 +166,7 @@ export function summarize(rows: CatTotal[], status: MovementStatus | 'ALL', fina
   for (const r of rows) {
     if (status !== 'ALL' && r.status !== status) continue;
     const a = r.amount;
-    if (!r.category_id) { s.unclassified += -a; continue; }
+    if (!r.category_id) { if (a < 0) s.unclassified += -a; continue; }
     switch (r.nature) {
       case 'INCOME': s.income += a; if (financialIds.has(r.category_id)) s.financialIncome += a; break;
       case 'EXPENSE': s.expense += -a; if (r.on_card) s.cardSpend += -a; break;

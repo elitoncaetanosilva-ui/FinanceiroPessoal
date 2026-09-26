@@ -30,7 +30,7 @@ function EditRow({ c }: { c: Category }) {
           <input type="hidden" name="id" value={c.id} />
           <input type="hidden" name="section" value={c.section} />
           {c.parent_id && <input type="hidden" name="parent_id" value={c.parent_id} />}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Nome"><input name="name" defaultValue={c.name} className={inputClass} /></Field>
             <Field label="Natureza econômica" hint="Define se entra como receita, despesa ou movimentação patrimonial."><NatureSelect value={c.nature} /></Field>
           </div>
@@ -55,7 +55,7 @@ export default async function Categorias() {
       {(['IN', 'OUT'] as const).map(section => (
         <div key={section} className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{section === 'IN' ? 'Total de entradas' : 'Total de saídas'}</h2>
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {idx.groups.filter(g => g.section === section && !g.is_hidden).map(g => (
               <Card key={g.id}>
                 <div className="border-b border-border pb-1 font-semibold"><EditRow c={g} /></div>
@@ -67,7 +67,7 @@ export default async function Categorias() {
                   <ActionForm action={saveCategoryAction} className="mt-2" submit="Adicionar">
                     <input type="hidden" name="parent_id" value={g.id} />
                     <input type="hidden" name="section" value={g.section} />
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <Field label="Nome"><input name="name" required className={inputClass} /></Field>
                       <Field label="Natureza"><NatureSelect value={g.nature} /></Field>
                     </div>
@@ -81,7 +81,7 @@ export default async function Categorias() {
       <Card>
         <h2 className="mb-2 font-semibold">Nova categoria (1º nível)</h2>
         <ActionForm action={saveCategoryAction} submit="Criar categoria">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="Nome"><input name="name" required className={inputClass} /></Field>
             <Field label="Grupo"><select name="section" className={inputClass}><option value="OUT">Saídas</option><option value="IN">Entradas</option></select></Field>
             <Field label="Natureza padrão"><NatureSelect value="EXPENSE" /></Field>

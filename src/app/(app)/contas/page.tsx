@@ -22,7 +22,7 @@ export default async function Contas() {
         <Card className="col-span-2 sm:col-span-1"><p className="text-xs text-muted">Patrimônio em contas</p><p className="text-lg font-bold"><Money cents={c.total} /></p></Card>
       </div>
       {active.length === 0 && <Empty title="Nenhuma conta cadastrada" action={<ButtonLink href="/contas/nova">Cadastrar conta</ButtonLink>}>Cadastre as contas bancárias, carteiras e investimentos que quer acompanhar.</Empty>}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {active.map(a => (
           <Link key={a.id} href={`/contas/${a.id}`} className="rounded-2xl border border-border bg-surface p-4 hover:bg-surface-2">
             <div className="flex items-start justify-between gap-2">

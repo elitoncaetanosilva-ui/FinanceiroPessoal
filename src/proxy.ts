@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Barreira rápida: sem cookie de sessão, redireciona para /login.
  * A validação completa da sessão (no banco) acontece em cada página/ação via requireUser().
  */
-const PUBLIC = ['/login', '/api/cron/', '/manifest.webmanifest', '/sw.js', '/icons/', '/offline'];
+const PUBLIC = ['/login', '/api/cron/', '/manifest.webmanifest', '/sw.js', '/icons/', '/offline.html', '/icon.svg'];
 
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;

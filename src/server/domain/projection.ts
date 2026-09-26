@@ -86,6 +86,7 @@ export async function projectCash(ctx: Ctx, opts: { days?: number; estimate?: bo
         if (!cat || cat.is_hidden || cat.nature === 'TRANSFER' || cat.nature === 'ADJUSTMENT') continue;
         // orçamento de categoria só vale se as subcategorias não tiverem orçamento próprio
         if (!cat.parent_id && (idx.children.get(cat.id) ?? []).some(k => (items.get(k.id)?.[mo - 1] ?? 0) > 0)) continue;
+        if ((vals[mo - 1] ?? 0) <= 0) continue;
         const remaining = (vals[mo - 1] ?? 0) - (used.get(`${m}|${cat.id}`) ?? 0);
         if (remaining <= 0) continue;
         if (cat.section === 'IN') inflow += remaining; else outflow += remaining;
