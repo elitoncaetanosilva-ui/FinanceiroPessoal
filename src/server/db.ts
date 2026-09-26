@@ -29,7 +29,7 @@ async function makePg(url: string): Promise<Db> {
   pg.types.setTypeParser(INT8, v => Number(v));
   pg.types.setTypeParser(NUMERIC, v => Number(v));
   pg.types.setTypeParser(DATE, v => v);
-  const pool = new pg.Pool({ connectionString: url, max: 5, idleTimeoutMillis: 5_000 });
+  const pool = new pg.Pool({ connectionString: url, max: Number(process.env.PG_POOL_MAX) || 5, idleTimeoutMillis: 5_000 });
   if (process.env.VERCEL) {
     try {
       const { attachDatabasePool } = await import('@vercel/functions');

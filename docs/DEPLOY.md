@@ -23,6 +23,7 @@ Testes: `npm test` (Vitest + PGlite), `npm run typecheck`, `npx tsx tests/e2e/fl
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | Vercel | Cria o primeiro usuário se ainda não houver nenhum. Depois de trocar a senha no app, `ADMIN_PASSWORD` pode ser apagada. |
 | `CRON_SECRET` | Vercel | Autentica o cron diário (`Authorization: Bearer …`). |
 | `PGLITE_DIR` | Local (opcional) | Pasta do banco local ou `memory`. |
+| `PG_POOL_MAX` | Opcional | Conexões por instância (padrão 5). |
 
 Modelo em `.env.example`. **Nunca versione `.env`** (está no .gitignore).
 
