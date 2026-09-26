@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2 } from 'lucide-react';
 import { classifyAction, deleteMovementAction, markCardPaymentAction, realizeAction, setSplitsAction, linkTransferAction } from '@/app/actions/movements';
@@ -48,16 +48,17 @@ export function SplitEditor({ id, amount, categories, splits }: {
   id: string; amount: number; categories: PickerCategory[]; splits: { category_id: string | null; amount_cents: number }[];
 }) {
   const sign: 1 | -1 = amount < 0 ? -1 : 1;
-  const [rows, setRows] = useState(splits.map(s => ({ categoryId: s.category_id, amount: formatNum(Math.abs(s.amount_cents)) })));
+  const nextKey = useRef(0);
+  const [rows, setRows] = useState(() => splits.map(s => ({ key: nextKey.current++, categoryId: s.category_id, amount: formatNum(Math.abs(s.amount_cents)), fresh: false })));
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const [pending, start] = useTransition();
   const router = useRouter();
   const total = useMemo(() => rows.reduce((s, r) => s + Math.abs(toCents(r.amount) ?? 0), 0), [rows]);
   const rest = Math.abs(amount) - total;
-  const upd = (i: number, patch: Partial<(typeof rows)[number]>) => setRows(r => r.map((x, k) => (k === i ? { ...x, ...patch } : x)));
+  const upd = (key: number, patch: Partial<(typeof rows)[number]>) => setRows(r => r.map(x => (x.key === key ? { ...x, ...patch } : x)));
   const save = () => start(async () => {
-    const r = await setSplitsAction(id, rows, sign);
+    const r = await setSplitsAction(id, rows.map(({ categoryId, amount: a }) => ({ categoryId, amount: a })), sign);
     if (!r.ok) { setErr(r.error); setOk(''); return; }
     setErr(''); setOk('Rateio salvo.');
     router.refresh();
@@ -65,14 +66,25 @@ export function SplitEditor({ id, amount, categories, splits }: {
   return (
     <div className="space-y-3">
       {rows.map((r, i) => (
-        <div key={i} className="flex items-end gap-2">
-          <div className="min-w-0 flex-1"><CategoryPicker categories={categories} value={r.categoryId} onChange={c => upd(i, { categoryId: c })} /></div>
-          <input value={r.amount} onChange={e => upd(i, { amount: e.target.value })} inputMode="decimal" className={`${inputClass} w-28 text-right`} aria-label="Valor" />
-          {rows.length > 1 && <button type="button" onClick={() => setRows(x => x.filter((_, k) => k !== i))} aria-label="Remover" className="flex h-11 w-11 items-center justify-center rounded-xl text-muted hover:bg-surface-2"><Trash2 size={18} /></button>}
+        <div key={r.key} className="space-y-2 rounded-xl border border-border p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Parte {i + 1}</span>
+            {rows.length > 1 && (
+              <button type="button" onClick={() => setRows(x => x.filter(y => y.key !== r.key))} aria-label={`Remover parte ${i + 1}`}
+                className="-my-2 flex h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-surface-2"><Trash2 size={18} /></button>
+            )}
+          </div>
+          <CategoryPicker categories={categories} value={r.categoryId} onChange={c => upd(r.key, { categoryId: c })} autoOpen={r.fresh}
+            prefer={amount < 0 ? 'OUT' : 'IN'} placeholder="Escolher categoria desta parte" />
+          <label className="flex items-center gap-2">
+            <span className="text-sm text-muted">Valor R$</span>
+            <input value={r.amount} onChange={e => upd(r.key, { amount: e.target.value })} inputMode="decimal" aria-label={`Valor da parte ${i + 1}`}
+              className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 text-right tnum outline-none focus:border-primary focus:ring-2 focus:ring-primary/25" />
+          </label>
         </div>
       ))}
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <button type="button" onClick={() => setRows(x => [...x, { categoryId: null, amount: rest > 0 ? formatNum(rest) : '' }])} className="flex items-center gap-1 text-primary"><Plus size={16} /> Adicionar parte</button>
+        <button type="button" onClick={() => setRows(x => [...x, { key: nextKey.current++, categoryId: null, amount: rest > 0 ? formatNum(rest) : '', fresh: true }])} className="flex items-center gap-1 text-primary"><Plus size={16} /> Adicionar parte</button>
         <span className={rest === 0 ? 'text-income' : 'text-danger'}>{rest === 0 ? 'Rateio fecha com o valor ✓' : <>Falta distribuir <Money cents={rest} /></>}</span>
       </div>
       <ErrorText>{err}</ErrorText>

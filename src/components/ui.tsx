@@ -47,7 +47,9 @@ export function ButtonLink({ variant = 'primary', size = 'md', className, ...res
   return <Link {...rest} className={cx(buttonClass(variant, size), className)} />;
 }
 
-export const inputClass = 'h-11 w-full rounded-xl border border-border bg-surface px-3 text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/25 disabled:opacity-60';
+const fieldBase = 'w-full rounded-xl border border-border bg-surface px-3 text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/25 disabled:opacity-60';
+export const inputClass = `h-11 ${fieldBase}`;
+export const textareaClass = `min-h-20 py-2 ${fieldBase}`;
 
 export function Field({ label, hint, children, className }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (

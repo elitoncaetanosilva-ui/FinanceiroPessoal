@@ -3,7 +3,7 @@ import { useActionState, useMemo, useState } from 'react';
 import { ArrowLeftRight, CreditCard, Minus, Plus, Receipt, Scale } from 'lucide-react';
 import { createMovementAction } from '@/app/actions/movements';
 import { CategoryPicker, type PickerCategory } from '@/components/CategoryPicker';
-import { Button, ErrorText, Field, cx, inputClass } from '@/components/ui';
+import { Button, ErrorText, Field, cx, inputClass, textareaClass } from '@/components/ui';
 import { dueMonthForPurchase, computeStatementDates } from '@/lib/card-cycle';
 import { fmtDate, fmtMonth, today as todayFn } from '@/lib/dates';
 import { formatBRL, formatNum, toCents } from '@/lib/money';
@@ -160,7 +160,7 @@ export default function NewMovementForm({ initialTipo, accounts, cards, categori
         </>
       )}
 
-      <Field label="Observação (opcional)"><textarea name="notes" rows={2} className={cx(inputClass, 'h-auto py-2')} /></Field>
+      <Field label="Observação (opcional)"><textarea name="notes" rows={2} className={textareaClass} /></Field>
       {!state.ok && <ErrorText>{state.error}</ErrorText>}
       {state.ok && state.message && <p className="rounded-xl bg-primary-soft px-3 py-2 text-sm text-primary">{state.message}</p>}
       <div className="sticky bottom-20 z-10 flex gap-2 bg-bg/90 py-2 backdrop-blur lg:static lg:bg-transparent">

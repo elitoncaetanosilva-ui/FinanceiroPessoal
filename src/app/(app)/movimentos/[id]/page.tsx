@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { updateMovementAction } from '@/app/actions/movements';
 import { ActionForm } from '@/components/forms';
 import { ClassifyBox, MovementActions, SplitEditor } from '@/components/movements/DetailClient';
-import { Badge, Card, CardTitle, Field, Money, PageHeader, cx, inputClass } from '@/components/ui';
+import { Badge, Card, CardTitle, Field, Money, PageHeader, cx, inputClass, textareaClass } from '@/components/ui';
 import { fmtDate, fmtMonth } from '@/lib/dates';
 import { formatBRL, formatNum } from '@/lib/money';
 import { suggestPattern } from '@/lib/text';
@@ -134,7 +134,7 @@ export default async function Movimento({ params, searchParams }: { params: Prom
                 </Field>
               )}
               <Field label="Vencimento (opcional)"><input type="date" name="due_date" defaultValue={m.due_date ?? ''} className={inputClass} /></Field>
-              <Field label="Observação" className="sm:col-span-2"><textarea name="notes" defaultValue={m.notes ?? ''} rows={2} className={cx(inputClass, 'h-auto py-2')} /></Field>
+              <Field label="Observação" className="sm:col-span-2"><textarea name="notes" defaultValue={m.notes ?? ''} rows={2} className={textareaClass} /></Field>
             </div>
           </ActionForm>
         </Card>

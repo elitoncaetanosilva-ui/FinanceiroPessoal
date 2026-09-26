@@ -137,7 +137,7 @@ export default function PendingTriage({ items: initial, categories, recent, card
             <input type="checkbox" checked={learn} onChange={e => setLearn(e.target.checked)} className="mt-0.5 h-5 w-5" />
             <span className="flex-1">
               Aplicar a semelhantes (criar regra)
-              {learn && <input value={curPattern} onChange={e => setPattern(e.target.value.toUpperCase())} className={cx(inputClass, 'mt-2 h-9')} aria-label="Trecho da descrição" />}
+              {learn && <input value={curPattern} onChange={e => setPattern(e.target.value.toUpperCase())} className={cx(inputClass, 'mt-2')} aria-label="Trecho da descrição" />}
               {learn && similar > 0 && <span className="mt-1 block text-xs text-primary">+{similar} pendente(s) com este trecho</span>}
             </span>
           </label>
