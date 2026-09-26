@@ -18,6 +18,7 @@ export interface MovementFilters {
   groupId?: string;
   ruleId?: string;
   planned?: 'only' | 'exclude';
+  holderKind?: 'account' | 'card';
 }
 
 export interface MovementListItem {
@@ -49,6 +50,8 @@ function where(f: MovementFilters, params: unknown[]) {
   if (f.planned === 'only') w.push(`m.status = 'PLANNED'`);
   if (f.planned === 'exclude') w.push(`m.status = 'REALIZED'`);
   if (f.kind) w.push(`m.kind = ${p(f.kind)}`);
+  if (f.holderKind === 'card') w.push('m.card_id is not null');
+  if (f.holderKind === 'account') w.push('m.account_id is not null');
   if (f.source) w.push(`m.source = ${p(f.source)}`);
   if (f.batchId) w.push(`m.import_batch_id = ${p(f.batchId)}`);
   if (f.groupId) w.push(`m.installment_group_id = ${p(f.groupId)}`);
@@ -98,6 +101,20 @@ export async function listMovements(ctx: Ctx, f: MovementFilters, cursor?: { dat
   const items = more ? rows.slice(0, limit) : rows;
   const last = items[items.length - 1];
   return { items, next: more && last ? { date: last.date, id: last.id } : null };
+}
+
+/** Totais do filtro (entradas e saídas, sem transferências internas e pagamentos de fatura). */
+export async function sumMovements(ctx: Ctx, f: MovementFilters) {
+  const params: unknown[] = [ctx.userId];
+  const w = where(f, params);
+  const r = await ctx.q.query<{ inflow: number; outflow: number; n: number }>(
+    `select coalesce(sum(m.amount_cents) filter (where m.amount_cents > 0 and m.kind in ('NORMAL','ADJUSTMENT')), 0) as inflow,
+            coalesce(-sum(m.amount_cents) filter (where m.amount_cents < 0 and m.kind in ('NORMAL','ADJUSTMENT')), 0) as outflow,
+            count(*)::int as n
+     from movements m where ${w}`,
+    params,
+  );
+  return r[0];
 }
 
 export async function countPending(ctx: Ctx) {

@@ -88,3 +88,27 @@ export async function listInstitutions({ q, userId }: Ctx) {
     'select id, name, code, is_active from institutions where user_id=$1 order by is_active desc, name', [userId],
   );
 }
+
+/** Subcategorias ativas e visíveis no formato do seletor. */
+export function pickerCategories(idx: CategoryIndex) {
+  const out: { id: string; name: string; group: string; section: 'IN' | 'OUT'; nature: string }[] = [];
+  for (const g of idx.groups) {
+    if (g.is_hidden || !g.is_active) continue;
+    for (const c of idx.children.get(g.id) ?? []) {
+      if (c.is_hidden || !c.is_active) continue;
+      out.push({ id: c.id, name: c.name, group: g.name, section: g.section, nature: c.nature });
+    }
+  }
+  return out;
+}
+
+/** Subcategorias usadas recentemente (para atalhos). */
+export async function recentCategoryIds({ q, userId }: Ctx, limit = 8) {
+  const r = await q.query<{ category_id: string }>(
+    `select s.category_id from movement_splits s join movements m on m.id=s.movement_id join categories c on c.id=s.category_id
+     where s.user_id=$1 and s.category_id is not null and m.deleted_at is null and c.system_key is null and m.source in ('MANUAL','IMPORT')
+     group by s.category_id order by max(m.updated_at) desc limit $2`,
+    [userId, limit],
+  );
+  return r.map(x => x.category_id);
+}

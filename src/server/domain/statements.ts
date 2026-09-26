@@ -8,30 +8,11 @@
  *  - Datas reais podem ser ajustadas na fatura (feriados etc.) e passam a valer no cálculo.
  *  - Em importações, a fatura informada no arquivo prevalece sobre o cálculo.
  */
-import { addMonths, dayOfMonth, monthStart, parts, type ISODate } from '@/lib/dates';
+import { monthStart, type ISODate } from '@/lib/dates';
 import type { Card, Ctx, Statement } from './types';
 
-type CardDays = Pick<Card, 'closing_day' | 'due_day'>;
-
-export function computeStatementDates(card: CardDays, dueMonth: ISODate) {
-  const { y, m } = parts(dueMonth);
-  const due_date = dayOfMonth(y, m, card.due_day);
-  const closingMonth = card.closing_day < card.due_day ? monthStart(dueMonth) : addMonths(monthStart(dueMonth), -1, 1);
-  const cp = parts(closingMonth);
-  const closing_date = dayOfMonth(cp.y, cp.m, card.closing_day);
-  return { closing_date, due_date };
-}
-
-/** Mês de vencimento (YYYY-MM-01) da fatura em que cai uma compra feita em `date`. */
-export function dueMonthForPurchase(card: CardDays, date: ISODate, existing: Pick<Statement, 'due_month' | 'closing_date'>[] = []): ISODate {
-  const byMonth = new Map(existing.map(s => [s.due_month, s.closing_date]));
-  for (let k = -1; k <= 3; k++) {
-    const dm = addMonths(monthStart(date), k, 1);
-    const closing = byMonth.get(dm) ?? computeStatementDates(card, dm).closing_date;
-    if (closing > date) return dm;
-  }
-  return addMonths(monthStart(date), 1, 1);
-}
+import { computeStatementDates, dueMonthForPurchase } from '@/lib/card-cycle';
+export { computeStatementDates, dueMonthForPurchase };
 
 export async function statementsOf({ q, userId }: Ctx, cardId: string): Promise<Statement[]> {
   return q.query<Statement>(
