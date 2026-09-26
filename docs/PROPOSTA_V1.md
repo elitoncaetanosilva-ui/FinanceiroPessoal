@@ -1,5 +1,7 @@
 # Proposta Técnica — Controle e Planejamento Financeiro Pessoal (V1)
 
+> **Status:** aprovada e implementada. Decisões do usuário: competência do cartão = mês do vencimento (D1); Financiamentos (Parcela de veículo/empréstimo) como natureza FINANCING na linha "Dívidas" (D2); migração do CAIXA 2026 até ago/26 (D3); contas e cartões pelo cadastro, editáveis (D4). Diferença de implementação: SQL versionado + node-postgres em vez de Drizzle (ver `docs/ARQUITETURA.md`). A documentação vigente está em `docs/ARQUITETURA.md`, `docs/BANCO.md`, `docs/REGRAS.md`, `docs/IMPORTACAO.md` e `docs/DEPLOY.md`.
+
 > Documento de análise (etapa 46 do escopo). Nenhum código foi alterado ainda.
 > Depois da sua validação, este documento vira a base de `docs/ARQUITETURA.md` e `docs/REGRAS.md`.
 

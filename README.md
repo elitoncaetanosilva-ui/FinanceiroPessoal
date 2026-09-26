@@ -1,69 +1,66 @@
-# Conciliador CAIXA 2026
+# Finanças — controle e planejamento financeiro pessoal
 
-Web app estático que concilia o **extrato da conta** e a **fatura do cartão** do Itaú com a planilha **CAIXA 2026**. Ele categoriza, deduplica, completa séries de parcelas, separa o que não reconheceu em **Pendências** e confere o saldo do banco contra o da planilha.
+Aplicação web (mobile first, instalável como app) para controlar contas, cartões, parcelamentos, transferências,
+investimentos, orçamento, previsão e fluxo de caixa, com importação de extratos e faturas.
 
-- Tudo roda **no navegador**: nenhum dado sai do dispositivo (CSP com `connect-src 'none'`). Não há backend nem banco de dados.
-- A planilha-mestra **nunca é alterada**. O app só gera os lançamentos novos, para copiar (TSV) ou baixar (.xlsx).
-- A planilha-base fica salva no `localStorage` do navegador. Você a carrega uma vez só.
+**Prioridades do projeto:** integridade dos dados → regras financeiras corretas → facilidade de uso → informação gerencial → estética.
+
+| | |
+|---|---|
+| Produção | Vercel, projeto `financeiro-pessoal` (região `gru1`, São Paulo) |
+| Banco | Postgres gerenciado (Neon, integração da Vercel) |
+| Stack | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · node-postgres · PGlite (dev/testes) · SheetJS · Recharts · Zod · Vitest · Playwright |
+
+## Documentação
+
+| Documento | Conteúdo |
+|---|---|
+| [docs/ARQUITETURA.md](docs/ARQUITETURA.md) | Camadas, pastas, fluxo de uma requisição, autenticação, PWA, decisões |
+| [docs/BANCO.md](docs/BANCO.md) | Modelo de dados, tabelas, índices, triggers, migrations, seed |
+| [docs/REGRAS.md](docs/REGRAS.md) | **Regras financeiras**: natureza × direção, cartão, faturas, parcelamentos, transferências, rateio, competência × caixa, orçado/realizado/previsto, projeção |
+| [docs/IMPORTACAO.md](docs/IMPORTACAO.md) | Fluxo de importação, **deduplicação**, classificação automática, importadores e como adicionar um banco |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Instalação local, variáveis de ambiente, migrations, deploy na Vercel, backup |
+| [docs/PROPOSTA_V1.md](docs/PROPOSTA_V1.md) | Análise e proposta técnica aprovada antes da construção (histórico) |
+
+## Rodar localmente (2 minutos)
+
+```bash
+npm install
+npm run dev            # http://localhost:3000 — sem DATABASE_URL usa PGlite em ./.data/pglite
+```
+
+Sem `DATABASE_URL`, o app cria o banco local, aplica as migrations e o usuário `dev@local` / `dev-password-123`.
+Para usar outro usuário: `npm run user:create -- email@exemplo.com 'senha-com-10+' 'Nome'`.
+
+```bash
+npm test               # regras financeiras + importação (Postgres em memória)
+npm run typecheck
+npx tsx tests/e2e/flow.ts   # fluxo completo no navegador (precisa do servidor em :3100 e dos arquivos reais)
+```
+
+Arquivos financeiros reais para testes ficam em `tests/fixtures/real/` — **a pasta está no .gitignore e nunca vai para o repositório**.
+
+## Primeiro uso (produção)
+
+1. Entrar com o e-mail e a senha iniciais (variáveis `ADMIN_EMAIL`/`ADMIN_PASSWORD`) e **trocar a senha** em Configurações.
+2. **Importações → escolher o extrato** do banco. Se a conta ainda não existir, use “Cadastrar esta conta com os dados do arquivo”
+   (agência, conta e saldo anterior vêm preenchidos). Confira a prévia e confirme.
+3. Importar a **fatura** de cada cartão (o cadastro do cartão também pode ser feito a partir do arquivo — informe o dia de fechamento e o limite).
+4. **Configurações → Migrar planilha CAIXA 2026** (opcional): histórico até o corte, entradas e orçamentos 2026/2027.
+5. **Pendentes**: classificar o que o app não reconheceu com segurança. Marque “aplicar a semelhantes” para ele aprender.
+6. Cadastrar **recorrências** (salário, aluguel, escola…) para o Previsto e a projeção de caixa.
 
 ## Estrutura
 
 ```
-public/             ← o site (é isto que vai para o Vercel)
-  index.html        UI (4 abas, tema claro/escuro, mobile-first)
-  app.js            estado, abas, pendências, export, painel de conciliação
-  engine.js         engine de referência + parsers SheetJS + export (roda no browser e no Node)
-test/
-  engine.test.js    testes da engine (critérios de aceitação)
-  make-fixtures.js  gera arquivos SINTÉTICOS no layout real do Itaú/CAIXA 2026
-  fixtures/         base.xlsx, extrato.xls, fatura.xlsx sintéticos (dados fictícios)
-vercel.json         deploy estático (sem build) + cabeçalhos de segurança
+migrations/            SQL versionado (aplicado no build da Vercel)
+scripts/               migrate, create-user, vercel-build
+src/app/(app)/         telas autenticadas (Início, Movimentos, Pendentes, Orçamento, Cartões, Contas, Importações…)
+src/app/actions/       server actions (validação no servidor; toda escrita em transação)
+src/app/api/           exportação e cron diário
+src/components/        UI (mobile first; tabela no notebook, cards no celular)
+src/lib/               utilitários puros: dinheiro em centavos, datas sem fuso, texto, ciclo do cartão
+src/server/domain/     regras financeiras (lançamentos, rateio, cartões, orçamento, projeção, classificação…)
+src/server/import/     pipeline de importação + um importador por formato + migração da planilha
+tests/                 Vitest (domínio e importação) e Playwright (fluxo e capturas)
 ```
-
-O SheetJS vem do CDN: `cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5`.
-
-## Rodar local
-
-```bash
-npm install        # só para os testes (instala o SheetJS no Node)
-npm test           # roda a engine contra as fixtures
-npm start          # serve public/ em http://localhost:3000
-```
-
-Qualquer servidor estático serve, por exemplo `python3 -m http.server -d public 3000`. Abrir o `index.html` direto (file://) também funciona na maioria dos navegadores.
-
-### Testar com os seus arquivos reais
-
-Coloque os arquivos em `test/fixtures/real/` (a pasta está no `.gitignore` e **nunca** vai para o repositório):
-
-```
-test/fixtures/real/base.xlsx       ← CAIXA 2026 CLAUDE - melhorado.xlsx
-test/fixtures/real/extrato.xls     ← ou extrato.xlsx
-test/fixtures/real/fatura.xlsx
-```
-
-Depois rode `npm test`. O teste "aceitação — arquivos reais" confere os números da especificação: 23 lançamentos novos na conta, 4 duplicados, 3 recebimentos, 2 excluídos, cerca de 38 parcelas, saldo de R$ 2.984,77 e idempotência. Sem esses arquivos, o teste é pulado.
-
-## Publicar no Vercel
-
-1. Suba este repositório no GitHub.
-2. No Vercel: **Add New → Project → Import** o repositório. O `vercel.json` já define `outputDirectory: public` e desliga o build. Não é preciso configurar nada.
-3. Clique em **Deploy**.
-
-Pela CLI: `npx vercel --prod` na raiz do projeto.
-
-## Como usar
-
-1. **Importar → Planilha-base** (uma vez): baixe o CAIXA 2026 do Google Sheets (*Arquivo → Fazer download → .xlsx*) e solte aqui. O app lê as abas `CASH`, `CARTÃO`, `Apoio` e `Regras` e mostra "histórico: N lançamentos". Recarregue a base sempre que a planilha mudar muito.
-2. **Extrato** (.xls/.xlsx do Itaú) e/ou **Fatura** (.xlsx, a fatura aberta).
-3. **Conciliar**. O resumo mostra as parcelas do cartão (a série completa, da parcela atual até a última), os lançamentos da conta, as pendências e os recebimentos. Também lista o que foi excluído de propósito: o pagamento da fatura anterior e o débito da fatura no extrato.
-4. **Pendências**: escolha o subgrupo (lista da aba Apoio) ou o destino do recebimento. O item sai da fila. Com "Lembrar" marcado, a mesma descrição passa a ser categorizada sozinha nas próximas vezes.
-5. **Copiar lançamentos**: cole no Google Sheets **na coluna C** da aba correspondente (blocos CARTÃO e CASH). As colunas A/B continuam com as fórmulas da planilha. Se o navegador bloquear o clipboard, use **Ver texto**. **Baixar .xlsx** gera um arquivo com as abas CARTÃO e CASH (e RECEBIMENTOS, quando houver).
-6. **Conciliação**: digite o saldo final da planilha (B). O painel soma os recebimentos não lançados e a fatura não paga, e mostra **Não conciliado** em verde (|diferença| < R$ 0,50) ou em vermelho.
-
-### Regras de deduplicação
-
-- Cartão: `valor | parcela NN/MM | ano-mês do vencimento`. Conta: `data | valor`.
-- A conferência usa o histórico da base **e** as conciliações já **exportadas** (copiadas ou baixadas). Reimportar os mesmos arquivos depois de exportar gera 0 lançamentos novos.
-- Antes de exportar, conciliar de novo **substitui** a rodada anterior. Assim dá para acrescentar a fatura depois do extrato sem perder nada. **Desfazer conciliação** tira da memória as chaves da última rodada.
-- **Apagar dados salvos** (no rodapé) limpa a base, a memória, as regras aprendidas e a última conciliação.
