@@ -5,7 +5,7 @@
  */
 import { addMonths, monthStart, today as todayFn, type ISODate } from '@/lib/dates';
 import { listCards } from './catalog';
-import { statementStatus, type StatementStatus } from './statements';
+import { dueMonthForPurchase, statementStatus, type StatementStatus } from './statements';
 import type { Card, Ctx } from './types';
 
 export interface StatementView {
@@ -44,6 +44,8 @@ export interface CardSummary extends Card {
   closed: StatementView | null;       // última fechada ainda não paga (a vencer ou vencida)
   upcoming: StatementView[];          // próximas (após a aberta)
   future_total: number;               // soma das faturas após a atual
+  /** 2 faturas anteriores, a atual e as 3 próximas (mês de vencimento; fatura inexistente = null) */
+  timeline: { due_month: ISODate; statement: StatementView | null; position: 'past' | 'current' | 'next' }[];
 }
 
 export async function cardSummaries(ctx: Ctx, onlyActive = true): Promise<CardSummary[]> {
@@ -62,10 +64,16 @@ export async function cardSummaries(ctx: Ctx, onlyActive = true): Promise<CardSu
     const current = sts.find(s => s.status === 'OPEN') ?? null;
     const closed = [...sts].reverse().find(s => s.closing_date <= today && s.remaining > 0 && !s.settled_manually) ?? null;
     const upcoming = sts.filter(s => current ? s.due_month > current.due_month : s.closing_date > today);
+    const currentMonth = current?.due_month ?? dueMonthForPurchase(c, today, sts);
+    const byMonth = new Map(sts.map(s => [s.due_month, s]));
+    const timeline = [-2, -1, 0, 1, 2, 3].map(k => {
+      const dm = addMonths(currentMonth, k, 1);
+      return { due_month: dm, statement: byMonth.get(dm) ?? null, position: (k < 0 ? 'past' : k === 0 ? 'current' : 'next') as 'past' | 'current' | 'next' };
+    });
     out.push({
       ...c, used, available: c.limit_cents - used,
       debt_now: sts.filter(s => s.closing_date <= today).reduce((s, x) => s + Math.max(0, x.remaining), 0),
-      current, closed, upcoming, future_total: upcoming.reduce((s, x) => s + x.remaining, 0),
+      current, closed, upcoming, future_total: upcoming.reduce((s, x) => s + x.remaining, 0), timeline,
     });
   }
   return out;
