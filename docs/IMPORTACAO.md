@@ -139,5 +139,14 @@ arquivo de novo. Prévia (`planSync`) e aplicação (`applySync`, numa transaç�
    extrato, na conta principal — quando o extrato vier, a importação reconhece o lançamento (mesmo valor, até 3 dias)
    como possível duplicado e liga os dois. Receitas com a mesma data e referência viram um lançamento com rateio.
 
-Aplicação pontual em produção: variável `INCOMES_JSON` no build (ver `scripts/incomes-from-env.ts`; os valores nunca
+Aplicação pontual em produção: variável `INCOMES_JSON` no build (ver `scripts/ops-from-env.ts`; os valores nunca
 vão para o git). O log do build mostra só contagens. Depois do deploy, apague a variável.
+
+## Fechamento dos meses pelo controle manual
+
+`src/server/domain/closing.ts` (`closeMonths`): no controle manual a conta paga a fatura de cada cartão no mês de
+vencimento (saldo final = inicial + entradas − saídas, compras do cartão no mês da fatura). O histórico migrado deixa as
+faturas "quitadas à mão", sem o débito na conta. O fechamento ajusta o saldo inicial informado, lança o **pagamento de
+cada fatura vencida** pela conta (no vencimento ou na data/descrição reais do extrato, para a importação futura
+reconhecer) e registra o saldo final de cada mês como conferência. Verificado com os arquivos reais
+(`tests/sync.test.ts`): jan a set/26 fecham no centavo com o controle manual. Aplicação pontual: `CLOSE_JSON`.

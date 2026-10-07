@@ -147,3 +147,61 @@ describe.skipIf(!has)('receitas mensais sem extrato importado (app guiado pela p
     expect(n[0].n).toBe(1);
   });
 });
+
+describe.skipIf(!has)('fechamento dos meses pelo controle manual (arquivos reais)', () => {
+  it('com os pagamentos das faturas, a conta fecha cada mês de jan a set no saldo do controle manual', async () => {
+    const { parseCaixa, applyCaixa } = await import('@/server/import/planilha');
+    const { reconcileIncomes } = await import('@/server/domain/incomes');
+    const { planSync, applySync } = await import('@/server/import/planilha-sync');
+    const { closeMonths } = await import('@/server/domain/closing');
+    const env = await setup();
+    const acc = await account(env, 'Itaú Conta Corrente', 'CHECKING', 0, '2025-12-31');
+    await env.db.query(`update accounts set branch='7449', number='04594-2' where id=$1`, [acc]);
+    const itau = await card(env, 'Itaú Black', 30, 7, 2_000_000, acc, ['FATURA ITAU UNICLASS']);
+    await env.db.query(`update credit_cards set last4='5850' where id=$1`, [itau]);
+    const nu = await card(env, 'Nubank', 20, 27, 500_000, acc, ['NU PAGAMENT']);
+    const cardMap = { 'Itaú Black': itau, Nubank: nu };
+    const old = parseCaixa(read('CAIXA_2026.xlsx'));
+    await inTx(env, ctx => applyCaixa(ctx, old, { accountId: acc, cardMap, cashCutoff: '2026-08-01', cardCutoff: '2026-09-01', importHistory: true, importBudgets: true }));
+    await inTx(env, ctx => reconcileIncomes(ctx, acc, old.incomes.map(i => ({ month: i.month, group: i.group, sub: i.sub, cents: i.valueCents,
+      ...(i.month === '2026-09-01' && ['Salário', 'Rescisão'].includes(i.sub) ? { date: '2026-09-03', ref: 'TED 001.3220.ELITON C D' } : {}) }))));
+    const p = parseCaixa(read('CAIXA_2026_v2.xlsx'));
+    await planSync(env.ctx, p, { accountId: acc, cardMap });
+    const b = await env.db.query<{ id: string }>(`insert into import_batches(user_id, file_name, file_sha256, file_size, importer_id) values ($1,'x','y',1,'caixa-planilha') returning id`, [env.userId]);
+    await inTx(env, ctx => applySync(ctx, b[0].id, p, { accountId: acc, cardMap }));
+
+    // saldos do controle manual (saldo final de cada mês; inicial de janeiro = 1.642,82)
+    const finals = [47240, 171477, 351474, 23456, 137984, 131604, 326140, -58695, 10851];
+    const spec = {
+      opening: { date: '2025-12-31', cents: 164282 },
+      monthEnds: finals.map((cents, i) => ({ date: new Date(Date.UTC(2026, i + 1, 0)).toISOString().slice(0, 10), cents })),
+      payments: [
+        { card: 'Itaú', dueMonth: '2026-09-01', date: '2026-09-08', description: 'FATURA ITAU UNICLASS MC BLA' },
+        { card: 'Nubank', dueMonth: '2026-09-01', date: '2026-09-21', description: 'PIX QRS NU PAGAMENT20/09' },
+      ],
+    };
+    const r = await inTx(env, ctx => closeMonths(ctx, acc, spec));
+    expect(r.openingChanged).toBe(true);
+    expect(r.paymentsCreated).toBe(18);                                       // 9 meses × 2 cartões
+    expect(r.months.map(m => m.diff)).toEqual(finals.map(() => 0));          // fecha no centavo, mês a mês
+    // pagamento é transferência: o realizado de saídas não muda
+    const { budgetView } = await import('@/server/domain/budget');
+    expect((await budgetView(env.ctx, '2026-01-01')).sections.find(s => s.section === 'OUT')!.total.realized).toBe(1215545);
+    // faturas pagas de verdade (não mais "quitadas à mão"), sem saldo pendente
+    const open = await env.db.query<{ n: number }>(`select count(*)::int as n from card_statements where due_month <= '2026-09-01' and settled_manually`);
+    expect(open[0].n).toBe(0);
+    const bal = (await accountBalances(env.ctx)).find(a => a.id === acc)!;
+    expect(bal.checkpoint).toMatchObject({ date: '2026-09-30', diff: 0 });
+
+    const n = await count(env);
+    const again = await inTx(env, ctx => closeMonths(ctx, acc, spec));
+    expect(again).toMatchObject({ openingChanged: false, paymentsCreated: 0 });
+    expect(await count(env)).toBe(n);
+
+    // o extrato de setembro importado depois reconhece o que já está lançado (fatura, TED, gastos); só o boleto
+    // da imobiliária (aluguel + condomínio, duas linhas na planilha) aparece como novo e precisa ser ignorado na revisão
+    const id = await inTx(env, ctx => createBatch(ctx, { name: 'e.xls', bytes: read('Extrato_Conta_Corrente-250920262155.xls') }));
+    const rows = await batchRows(env.ctx, id);
+    expect(rows.filter(x => x.status === 'NEW').map(x => x.description)).toEqual(['PAG BOLETO J TOMASI IMOVEIS']);
+  });
+});
