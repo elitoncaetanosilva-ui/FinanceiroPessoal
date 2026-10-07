@@ -24,6 +24,8 @@ Testes: `npm test` (Vitest + PGlite), `npm run typecheck`, `npx tsx tests/e2e/fl
 | `CRON_SECRET` | Vercel | Autentica o cron diário (`Authorization: Bearer …`). |
 | `PGLITE_DIR` | Local (opcional) | Pasta do banco local ou `memory`. |
 | `PG_POOL_MAX` | Opcional | Conexões por instância (padrão 5). |
+| `RESET_PASSWORD_EMAIL`, `RESET_PASSWORD` | Vercel (pontual) | Redefine a senha no próximo build e encerra as sessões. Apague depois. |
+| `INCOMES_JSON` | Vercel (pontual) | Concilia receitas mensais informadas no próximo build (`scripts/incomes-from-env.ts`). Apague depois. |
 
 Modelo em `.env.example`. **Nunca versione `.env`** (está no .gitignore).
 

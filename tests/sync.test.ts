@@ -75,3 +75,45 @@ describe.skipIf(!has)('sincronização com a planilha atualizada (arquivos reais
     expect(await count(env)).toBe(before + 21);
   });
 });
+
+describe.skipIf(!has)('receitas mensais informadas (arquivos reais)', () => {
+  it('histórico vai para o 1º dia útil, a TED do extrato é rateada e o que não está no extrato vai para "Outras contas"', async () => {
+    const { parseCaixa, applyCaixa } = await import('@/server/import/planilha');
+    const { reconcileIncomes } = await import('@/server/domain/incomes');
+    const env = await setup();
+    const acc = await account(env, 'Itaú', 'CHECKING', -58695, '2026-08-31');
+    await env.db.query(`update accounts set branch='7449', number='04594-2' where id=$1`, [acc]);
+    const old = parseCaixa(read('CAIXA_2026.xlsx'));
+    await inTx(env, ctx => applyCaixa(ctx, old, { accountId: acc, cardMap: {}, cashCutoff: '2026-08-01', cardCutoff: '2026-09-01', importHistory: true, importBudgets: false }));
+    await importFile(env, 'Extrato_Conta_Corrente-250920262155.xls', read('Extrato_Conta_Corrente-250920262155.xls'));
+    const balance = async () => (await accountBalances(env.ctx)).find(a => a.id === acc)!.balance_cents;
+    const before = await balance();
+    // a tabela de receitas que o usuário enviou = REALIZADO das entradas da planilha (jan a set)
+    const entries = old.incomes.map(i => ({ month: i.month, group: i.group, sub: i.sub, cents: i.valueCents }));
+    const sep = entries.filter(e => e.month === '2026-09-01');
+    expect(sep).toHaveLength(4);
+
+    const r = await inTx(env, ctx => reconcileIncomes(ctx, acc, entries));
+    expect(r).toMatchObject({ kept: entries.length - 4, redated: entries.filter(e => ['01', '02', '03', '05', '08'].includes(e.month.slice(5, 7))).length, classified: 2, splitMovements: 1, createdMain: 0, createdOther: 2, divergent: 0 });
+    // jan/fev/mar/mai/ago começam em feriado ou fim de semana
+    const dates = await env.db.query<{ date: string }>(`select distinct date::text from movements where dedup_key like 'mig|inc|%' order by 1`);
+    expect(dates.map(d => d.date)).toEqual(['2026-01-02', '2026-02-02', '2026-03-02', '2026-04-01', '2026-05-04', '2026-06-01', '2026-07-01', '2026-08-03']);
+    // TED de 03/09 = salário + rescisão
+    const ted = await env.db.query<{ name: string; amount_cents: number }>(
+      `select c.name, x.amount_cents from movement_splits x join movements m on m.id=x.movement_id join categories c on c.id=x.category_id
+       where m.description like 'TED 001.3220%' order by x.amount_cents`);
+    expect(ted).toEqual([{ name: 'Salário', amount_cents: 650000 }, { name: 'Rescisão', amount_cents: 702435 }]);
+    expect(await balance()).toBe(before);                       // a conta principal continua conferindo com o banco
+    const other = (await accountBalances(env.ctx)).find(a => a.name === 'Outras contas')!;
+    expect(other.balance_cents).toBe(211768);
+    // entradas de setembro completas no orçamento
+    const { budgetView } = await import('@/server/domain/budget');
+    const v = await budgetView(env.ctx, '2026-09-01');
+    expect(v.sections.find(s => s.section === 'IN')!.total.realized).toBe(sep.reduce((s, e) => s + e.cents, 0));
+
+    const n = await count(env);
+    const again = await inTx(env, ctx => reconcileIncomes(ctx, acc, entries));
+    expect(again).toMatchObject({ kept: entries.length, redated: 0, classified: 0, createdMain: 0, createdOther: 0 });
+    expect(await count(env)).toBe(n);
+  });
+});

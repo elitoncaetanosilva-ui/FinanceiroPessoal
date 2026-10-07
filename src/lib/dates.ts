@@ -32,6 +32,33 @@ export function addMonths(d: ISODate, n: number, day?: number): ISODate {
   return ymd(y, m, Math.min(day ?? p.d, daysInMonth(y, m)));
 }
 export const monthStart = (d: ISODate): ISODate => d.slice(0, 7) + '-01';
+
+/** Domingo de Páscoa (algoritmo de Meeus/Butcher). */
+export function easter(y: number): ISODate {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return ymd(y, month, day);
+}
+/** Feriados bancários nacionais (inclui Carnaval e Corpus Christi, sem expediente bancário). */
+export function bankHolidays(y: number): Set<ISODate> {
+  const e = easter(y);
+  return new Set([
+    ...['01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25'].map(md => `${y}-${md}`),
+    addDays(e, -48), addDays(e, -47), addDays(e, -2), addDays(e, 60),
+  ]);
+}
+export function isBusinessDay(d: ISODate) {
+  const wd = new Date(d + 'T00:00:00Z').getUTCDay();
+  return wd !== 0 && wd !== 6 && !bankHolidays(parts(d).y).has(d);
+}
+/** Primeiro dia útil do mês de `d`. */
+export function firstBusinessDay(d: ISODate): ISODate {
+  let x = monthStart(d);
+  while (!isBusinessDay(x)) x = addDays(x, 1);
+  return x;
+}
 export const monthEnd = (d: ISODate): ISODate => { const p = parts(d); return ymd(p.y, p.m, daysInMonth(p.y, p.m)); };
 /** '2026-09' → '2026-09-01' */
 export const monthKeyToDate = (k: string): ISODate => k.slice(0, 7) + '-01';

@@ -123,3 +123,19 @@ arquivo de novo. Prévia (`planSync`) e aplicação (`applySync`, numa transaç�
   registrado como conferência manual da conta (também dá para informar em Contas → conta → Conferência com o banco).
 - Verificado com o arquivo real (`tests/sync.test.ts`): após extrato até 23/09 e faturas, entram 14 linhas da conta
   (24/09 a 07/10) e 7 do cartão; o saldo calculado em 30/09 bate com o do banco (R$ 108,51); reenviar = 0 novos.
+
+## Receitas mensais informadas
+
+`src/server/domain/incomes.ts` (`reconcileIncomes`) concilia uma tabela de receitas realizadas por mês/subcategoria
+(a de entradas do CAIXA MENSAL) com o app, sem duplicar:
+
+1. receita que já está no app (parte de rateio com a subcategoria, competência no mês e mesmo valor) é mantida;
+   histórico migrado no dia 1º passa para o **primeiro dia útil** do mês (`firstBusinessDay`, feriados bancários nacionais);
+2. senão, um crédito do extrato no mês, pendente ou classificado como entrada, com valor igual a uma receita ou à soma
+   de várias, é classificado/rateado (ex.: TED de 03/09 = Salário + Rescisão);
+3. o que sobra é lançado no primeiro dia útil: antes do saldo inicial, na conta principal (histórico, sem efeito no
+   saldo); depois, na conta **"Outras contas"**, para a conta principal continuar conferindo com o banco.
+   Mês sem extrato importado fica aguardando.
+
+Aplicação pontual em produção: variável `INCOMES_JSON` no build (ver `scripts/incomes-from-env.ts`; os valores nunca
+vão para o git). O log do build mostra só contagens. Depois do deploy, apague a variável.

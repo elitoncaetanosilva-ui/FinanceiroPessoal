@@ -6,7 +6,8 @@ import { accountBalances, consolidated } from '@/server/domain/balances';
 import { categoryTotals, summarize } from '@/server/domain/queries';
 import { cardSummaries, statementViews } from '@/server/domain/cards';
 import { toCents, splitInstallments } from '@/lib/money';
-import { parseDate, addMonths } from '@/lib/dates';
+import { parseDate, addMonths, easter, firstBusinessDay } from '@/lib/dates';
+import { subsetSum } from '@/server/domain/incomes';
 
 async function econ(env: TestEnv, from = '2026-01-01', to = '2027-12-01') {
   const rows = await categoryTotals(env.ctx, from, to);
@@ -14,6 +15,15 @@ async function econ(env: TestEnv, from = '2026-01-01', to = '2027-12-01') {
 }
 
 describe('utilitários', () => {
+  it('primeiro dia útil (feriados bancários nacionais) e soma de subconjunto', () => {
+    expect(easter(2026)).toBe('2026-04-05');
+    expect(['01', '02', '03', '04', '05', '06', '07', '08', '09'].map(m => firstBusinessDay(`2026-${m}-01`)))
+      .toEqual(['2026-01-02', '2026-02-02', '2026-03-02', '2026-04-01', '2026-05-04', '2026-06-01', '2026-07-01', '2026-08-03', '2026-09-01']);
+    expect(firstBusinessDay('2026-11-01')).toBe('2026-11-03');               // 01/11 domingo, 02/11 Finados
+    expect(subsetSum([650000, 200000, 702435, 11768], 1352435)).toEqual([0, 2]);
+    expect(subsetSum([100, 200], 50)).toBeNull();
+  });
+
   it('converte valores pt-BR', () => {
     expect(toCents('1.234,56')).toBe(123456);
     expect(toCents('- 1.693,60')).toBe(-169360);
