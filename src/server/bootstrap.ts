@@ -30,4 +30,22 @@ export async function ensureAdminUser(db: Db, log: (m: string) => void = () => {
     return;
   }
   for (const u of users) await db.tx(q => seedUserDefaults(q, u.id));
+  await resetPasswordFromEnv(db, log);
+}
+
+/**
+ * Recuperação de senha (uso pontual): com RESET_PASSWORD_EMAIL e RESET_PASSWORD definidos, o build troca
+ * a senha desse usuário e encerra as sessões abertas. Depois do deploy, apague as duas variáveis.
+ */
+export async function resetPasswordFromEnv(db: Db, log: (m: string) => void = () => {}) {
+  const email = process.env.RESET_PASSWORD_EMAIL?.trim().toLowerCase();
+  const password = process.env.RESET_PASSWORD;
+  if (!email || !password) return;
+  if (password.length < 10) { log('RESET_PASSWORD com menos de 10 caracteres — senha não alterada'); return; }
+  const hash = await hashPassword(password);
+  const r = await db.query<{ id: string }>('update users set password_hash=$2, updated_at=now() where email=$1 returning id', [email, hash]);
+  if (!r[0]) { log(`RESET_PASSWORD_EMAIL não encontrado: ${email}`); return; }
+  await db.query('delete from sessions where user_id=$1', [r[0].id]);
+  await db.query('delete from login_attempts where email=$1', [email]);
+  log(`senha redefinida para ${email} (sessões encerradas)`);
 }
