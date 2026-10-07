@@ -117,3 +117,33 @@ describe.skipIf(!has)('receitas mensais informadas (arquivos reais)', () => {
     expect(await count(env)).toBe(n);
   });
 });
+
+describe.skipIf(!has)('receitas mensais sem extrato importado (app guiado pela planilha)', () => {
+  it('lança na conta principal (TED na data real, com rateio); o extrato importado depois reconhece e não duplica', async () => {
+    const { parseCaixa, applyCaixa } = await import('@/server/import/planilha');
+    const { reconcileIncomes } = await import('@/server/domain/incomes');
+    const env = await setup();
+    const acc = await account(env, 'Itaú Conta Corrente', 'CHECKING', 0, '2025-12-31');
+    await env.db.query(`update accounts set branch='7449', number='04594-2' where id=$1`, [acc]);
+    const old = parseCaixa(read('CAIXA_2026.xlsx'));
+    await inTx(env, ctx => applyCaixa(ctx, old, { accountId: acc, cardMap: {}, cashCutoff: '2026-08-01', cardCutoff: '2026-09-01', importHistory: true, importBudgets: false }));
+    const ref = 'TED 001.3220.ELITON C D';
+    const entries = old.incomes.map(i => ({ month: i.month, group: i.group, sub: i.sub, cents: i.valueCents,
+      ...(i.month === '2026-09-01' && ['Salário', 'Rescisão'].includes(i.sub) ? { date: '2026-09-03', ref } : {}) }));
+    const r = await inTx(env, ctx => reconcileIncomes(ctx, acc, entries));
+    expect(r).toMatchObject({ kept: entries.length - 4, createdMain: 4, createdOther: 0, splitMovements: 1, divergent: 0 });
+    const sep = await env.db.query<{ date: string; amount_cents: number; n: number }>(
+      `select m.date::text, m.amount_cents, (select count(*)::int from movement_splits x where x.movement_id=m.id) as n
+       from movements m where m.account_id=$1 and m.amount_cents > 0 and m.competence='2026-09-01' order by m.date, m.amount_cents`, [acc]);
+    expect(sep).toEqual([{ date: '2026-09-01', amount_cents: 11768, n: 1 }, { date: '2026-09-01', amount_cents: 200000, n: 1 }, { date: '2026-09-03', amount_cents: 1352435, n: 2 }]);
+    const again = await inTx(env, ctx => reconcileIncomes(ctx, acc, entries));
+    expect(again).toMatchObject({ kept: entries.length, createdMain: 0, splitMovements: 0 });
+
+    const id = await inTx(env, ctx => createBatch(ctx, { name: 'e.xls', bytes: read('Extrato_Conta_Corrente-250920262155.xls') }));
+    const ted = (await batchRows(env.ctx, id)).find(x => x.description.startsWith('TED 001.3220'))!;
+    expect(ted.status).toBe('POSSIBLE_DUPLICATE');
+    await inTx(env, ctx => commitBatch(ctx, id));
+    const n = await env.db.query<{ n: number }>(`select count(*)::int as n from movements where account_id=$1 and amount_cents=1352435 and deleted_at is null`, [acc]);
+    expect(n[0].n).toBe(1);
+  });
+});

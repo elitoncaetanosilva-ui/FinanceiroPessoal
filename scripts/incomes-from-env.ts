@@ -25,10 +25,13 @@ export async function incomesFromEnv(log = (m: string) => console.log('[db]', m)
     const acc = accs.find(a => spec.account && a.name.toLowerCase().startsWith(spec.account.toLowerCase())) ?? accs[0];
     if (!acc) { log('INCOMES_JSON: conta corrente não encontrada — nada feito'); return; }
     log(`conta usada: ${acc.name}`);
+    const sync = await db.query<{ n: number }>(
+      `select count(*)::int as n from import_batches where user_id=$1 and importer_id='caixa-planilha' and status='COMMITTED' and stats ? 'created'`, [user.id]);
+    log(`sincronizações da planilha já aplicadas: ${sync[0].n}`);
     const r = await db.tx(q => reconcileIncomes({ q, userId: user.id }, acc.id, spec.entries));
     log(`receitas: ${spec.entries.length} informadas · ${r.kept} já no app (${r.redated} com data ajustada para o 1º dia útil) · ` +
       `${r.classified} classificadas no extrato (${r.splitMovements} rateio) · ${r.createdMain} lançadas no histórico · ` +
-      `${r.createdOther} lançadas em "Outras contas" · ${r.divergent} divergentes · ${r.waiting} aguardando extrato`);
+      `${r.createdOther} lançadas em "Outras contas" · ${r.divergent} divergentes`);
   } finally {
     await db.close();
   }

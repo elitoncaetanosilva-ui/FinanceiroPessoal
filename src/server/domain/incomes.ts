@@ -6,9 +6,7 @@
  *      Histórico migrado com data no dia 1º passa para o primeiro dia útil do mês;
  *   2. senão, procura no extrato daquele mês um crédito pendente (ou classificado como entrada) cujo valor seja
  *      igual a uma receita ou à soma de várias (ex.: uma TED com salário + rescisão) → classifica / rateia;
- *   3. o que sobrar é lançado no primeiro dia útil do mês. Antes do saldo inicial da conta principal (histórico)
- *      vai para ela; depois, para a conta "Outras contas" — assim a conta principal continua conferindo com o
- *      saldo do banco (o dinheiro não passou por ela). Meses sem extrato importado ficam aguardando.
+ *   3. o que sobrar é lançado na data informada ou no primeiro dia útil do mês (detalhes no passo 3 abaixo).
  * Idempotente: rodar de novo não duplica nem altera nada.
  */
 import { firstBusinessDay, monthStart, type ISODate } from '@/lib/dates';
@@ -17,8 +15,12 @@ import { categoryIndex } from './catalog';
 import { insertMovement, setSplits } from './movements';
 import { DomainError, type Ctx } from './types';
 
-export interface IncomeEntry { month: ISODate; group: string; sub: string; cents: number }
-export interface IncomeResult { kept: number; redated: number; classified: number; splitMovements: number; createdMain: number; createdOther: number; divergent: number; waiting: number }
+export interface IncomeEntry {
+  month: ISODate; group: string; sub: string; cents: number;
+  /** data real (ex.: achada num extrato) e referência; mesma data + referência = um lançamento com rateio */
+  date?: ISODate; ref?: string;
+}
+export interface IncomeResult { kept: number; redated: number; classified: number; splitMovements: number; createdMain: number; createdOther: number; divergent: number }
 
 export const OTHER_ACCOUNT_NAME = 'Outras contas';
 
@@ -34,7 +36,7 @@ export async function reconcileIncomes(ctx: Ctx, accountId: string, entries: Inc
     return c.id;
   };
   const inCats = new Set(idx.all.filter(c => c.section === 'IN').map(c => c.id));
-  const res: IncomeResult = { kept: 0, redated: 0, classified: 0, splitMovements: 0, createdMain: 0, createdOther: 0, divergent: 0, waiting: 0 };
+  const res: IncomeResult = { kept: 0, redated: 0, classified: 0, splitMovements: 0, createdMain: 0, createdOther: 0, divergent: 0 };
 
   const byMonth = new Map<ISODate, (IncomeEntry & { cat: string })[]>();
   for (const e of entries) {
@@ -85,25 +87,36 @@ export async function reconcileIncomes(ctx: Ctx, accountId: string, entries: Inc
       for (const i of [...pick].sort((a, b) => b - a)) left.splice(i, 1);
     }
 
-    // 3) lança o que faltou no primeiro dia útil (depois do saldo inicial, só com o extrato do mês já importado:
-    //    sem ele a receita pode ainda chegar pelo extrato e seria contada duas vezes)
+    // 3) lança o que faltou, na data real (se informada) ou no primeiro dia útil:
+    //    - antes do saldo inicial da conta principal: nela (histórico, sem efeito no saldo);
+    //    - mês com extrato importado: em "Outras contas" (o dinheiro não passou pela conta principal);
+    //    - mês sem extrato importado: na conta principal. Quando o extrato vier, a importação reconhece o
+    //      lançamento (mesmo valor, até 3 dias) como possível duplicado e liga os dois. Receitas com a mesma
+    //      data e referência viram um lançamento só, com rateio (ex.: uma TED com salário + rescisão).
     const historic = fbd <= acc.opening_balance_date;
-    if (!historic && !credits.length) {
-      const imported = await ctx.q.query('select 1 from movements where account_id=$1 and source=\'IMPORT\' and deleted_at is null and date_trunc(\'month\', date)::date=$2 limit 1', [accountId, month]);
-      if (!imported[0]) { res.waiting += left.length; continue; }
-    }
-    for (const e of left) {
-      const target = historic ? accountId : await otherAccount(ctx, acc.opening_balance_date);
-      const key = historic ? `mig|inc|${norm(e.group)}|${norm(e.sub)}|${month}` : `inc|${norm(e.group)}|${norm(e.sub)}|${month}`;
-      const dup = await ctx.q.query<{ id: string }>(
-        'select id from movements where account_id=$1 and dedup_key=$2 and deleted_at is null', [target, key]);
-      if (dup[0]) { res.divergent++; continue; }   // já lançado com outro valor/categoria: não mexe
+    const imported = historic || credits.length > 0 || !!(await ctx.q.query(
+      `select 1 from movements where account_id=$1 and source='IMPORT' and deleted_at is null and date_trunc('month', date)::date=$2 limit 1`,
+      [accountId, month]))[0];
+    const groups = new Map<string, typeof left>();
+    left.forEach((e, i) => { const k = e.ref && e.date ? `${e.date}|${e.ref}` : `#${i}`; groups.set(k, [...(groups.get(k) ?? []), e]); });
+    for (const g of groups.values()) {
+      const e = g[0];
+      const date = e.date && monthStart(e.date) === month ? e.date : fbd;
+      const toOther = !historic && imported;
+      const target = toOther ? await otherAccount(ctx, acc.opening_balance_date) : accountId;
+      const what = g.length > 1 ? norm(e.ref) : `${norm(e.group)}|${norm(e.sub)}`;
+      const key = historic ? `mig|inc|${what}|${month}` : `inc|${what}|${month}`;
+      const dup = await ctx.q.query<{ id: string }>('select id from movements where account_id=$1 and dedup_key=$2 and deleted_at is null', [target, key]);
+      if (dup[0]) { res.divergent += g.length; continue; }   // já lançado com outro valor/categoria: não mexe
+      const total = g.reduce((s, x) => s + x.cents, 0);
       await insertMovement(ctx, {
-        accountId: target, amountCents: e.cents, date: fbd, competence: month, description: e.sub,
-        categoryId: e.cat, source: 'MIGRATION', dedupKey: key, status: 'REALIZED',
-        notes: historic ? null : 'Receita informada na planilha; não aparece no extrato da conta principal.',
+        accountId: target, amountCents: total, date, competence: month, description: e.ref || e.sub,
+        ...(g.length > 1 ? { splits: g.map(x => ({ categoryId: x.cat, amountCents: x.cents })) } : { categoryId: e.cat }),
+        source: 'MIGRATION', dedupKey: key, status: 'REALIZED',
+        notes: toOther ? 'Receita informada na planilha; não aparece no extrato da conta principal.' : historic ? null : 'Receita informada na planilha.',
       }, { audit: false });
-      if (historic) res.createdMain++; else res.createdOther++;
+      if (g.length > 1) res.splitMovements++;
+      if (toOther) res.createdOther += g.length; else res.createdMain += g.length;
     }
   }
   return res;

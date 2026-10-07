@@ -133,9 +133,11 @@ arquivo de novo. Prévia (`planSync`) e aplicação (`applySync`, numa transaç�
    histórico migrado no dia 1º passa para o **primeiro dia útil** do mês (`firstBusinessDay`, feriados bancários nacionais);
 2. senão, um crédito do extrato no mês, pendente ou classificado como entrada, com valor igual a uma receita ou à soma
    de várias, é classificado/rateado (ex.: TED de 03/09 = Salário + Rescisão);
-3. o que sobra é lançado no primeiro dia útil: antes do saldo inicial, na conta principal (histórico, sem efeito no
-   saldo); depois, na conta **"Outras contas"**, para a conta principal continuar conferindo com o banco.
-   Mês sem extrato importado fica aguardando.
+3. o que sobra é lançado na data real informada (ex.: achada num extrato) ou no **primeiro dia útil**:
+   antes do saldo inicial, na conta principal (histórico, sem efeito no saldo); em mês com extrato importado, na conta
+   **"Outras contas"** (o dinheiro não passou pela conta principal, que continua conferindo com o banco); em mês sem
+   extrato, na conta principal — quando o extrato vier, a importação reconhece o lançamento (mesmo valor, até 3 dias)
+   como possível duplicado e liga os dois. Receitas com a mesma data e referência viram um lançamento com rateio.
 
 Aplicação pontual em produção: variável `INCOMES_JSON` no build (ver `scripts/incomes-from-env.ts`; os valores nunca
 vão para o git). O log do build mostra só contagens. Depois do deploy, apague a variável.
