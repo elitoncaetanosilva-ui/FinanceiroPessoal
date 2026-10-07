@@ -17,9 +17,9 @@ export default async function Configuracoes() {
         <ThemeSelect />
       </Card>
       <Card>
-        <CardTitle>Migrar a planilha CAIXA 2026</CardTitle>
-        <p className="mb-3 text-sm text-muted">Traz o histórico (CASH e CARTÃO) até o mês de corte, as entradas realizadas e os orçamentos (colunas PREVISTO). Pode ser repetida sem duplicar.</p>
-        <Link href="/configuracoes/planilha" className="text-primary">Abrir migração ›</Link>
+        <CardTitle>Planilha CAIXA 2026</CardTitle>
+        <p className="mb-3 text-sm text-muted">Atualizou a planilha? Envie o arquivo: o app inclui só o que falta e preenche as categorias dos pendentes, com prévia antes de aplicar. Nunca duplica.</p>
+        <Link href="/configuracoes/planilha" className="text-primary">Sincronizar planilha ›</Link>
       </Card>
       <Card>
         <CardTitle>Seus dados</CardTitle>

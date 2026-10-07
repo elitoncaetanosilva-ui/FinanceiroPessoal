@@ -9,6 +9,7 @@ import { safe, writeTx, type ActionResult } from '@/server/context';
 import { audit } from '@/server/domain/audit';
 import { assignPendingBatches } from '@/server/import/pipeline';
 import { detectCardPayments } from '@/server/domain/movements';
+import { deleteCheckpoint, setCheckpoint } from '@/server/domain/balances';
 import { DomainError } from '@/server/domain/types';
 
 const opt = (v: FormDataEntryValue | null) => { const s = String(v ?? '').trim(); return s === '' ? null : s; };
@@ -80,6 +81,25 @@ export async function setAccountActiveAction(id: string, active: boolean) {
     await ctx.q.query('update accounts set is_active=$3, updated_at=now() where id=$1 and user_id=$2', [id, ctx.userId, active]);
     await audit(ctx, 'account', id, active ? 'ACTIVATE' : 'DEACTIVATE');
   }));
+  done();
+  return r;
+}
+
+/** Saldo informado pelo usuário para conferir com o calculado pelo app. */
+export async function saveCheckpointAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const r = await safe(() => writeTx(async ctx => {
+    const id = String(fd.get('account_id') ?? ''), date = String(fd.get('date') ?? ''), cents = toCents(fd.get('balance'));
+    if (!isISODate(date)) throw new DomainError('Informe a data do saldo.');
+    if (cents == null) throw new DomainError('Informe o saldo do banco.');
+    await setCheckpoint(ctx, id, date, cents);
+    await audit(ctx, 'account', id, 'CHECKPOINT', null, { date, balance_cents: cents });
+  }), 'Saldo registrado.');
+  done();
+  return r;
+}
+
+export async function deleteCheckpointAction(accountId: string, date: string) {
+  const r = await safe(() => writeTx(ctx => deleteCheckpoint(ctx, accountId, date)));
   done();
   return r;
 }

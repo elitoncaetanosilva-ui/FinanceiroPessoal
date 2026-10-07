@@ -46,7 +46,7 @@ Arquivos financeiros reais para testes ficam em `tests/fixtures/real/` — **a p
 2. **Importações → escolher o extrato** do banco. Se a conta ainda não existir, use “Cadastrar esta conta com os dados do arquivo”
    (agência, conta e saldo anterior vêm preenchidos). Confira a prévia e confirme.
 3. Importar a **fatura** de cada cartão (o cadastro do cartão também pode ser feito a partir do arquivo — informe o dia de fechamento e o limite).
-4. **Configurações → Migrar planilha CAIXA 2026** (opcional): histórico até o corte, entradas e orçamentos 2026/2027.
+4. **Configurações → Planilha CAIXA** (opcional): migração inicial (histórico até o corte, entradas e orçamentos 2026/2027) e, depois, sincronização da planilha atualizada (só entra o que falta).
 5. **Pendentes**: classificar o que o app não reconheceu com segurança. Marque “aplicar a semelhantes” para ele aprender.
 6. Cadastrar **recorrências** (salário, aluguel, escola…) para o Previsto e a projeção de caixa.
 

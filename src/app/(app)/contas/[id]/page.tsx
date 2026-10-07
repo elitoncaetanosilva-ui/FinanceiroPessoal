@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { CircleCheck, TriangleAlert } from 'lucide-react';
-import { setAccountActiveAction } from '@/app/actions/cadastros';
+import { deleteCheckpointAction, saveCheckpointAction, setAccountActiveAction } from '@/app/actions/cadastros';
 import AccountForm from '@/components/cadastros/AccountForm';
-import { ActionButton } from '@/components/forms';
-import { ButtonLink, Card, CardTitle, Money, PageHeader } from '@/components/ui';
-import { fmtDate, today } from '@/lib/dates';
+import { ActionButton, ActionForm } from '@/components/forms';
+import { ButtonLink, Card, CardTitle, Field, Money, PageHeader, inputClass } from '@/components/ui';
+import { addDays, fmtDate, monthStart, today } from '@/lib/dates';
 import { readCtx } from '@/server/context';
 import { accountBalances, checkpointsReport } from '@/server/domain/balances';
 import { listInstitutions } from '@/server/domain/catalog';
@@ -30,24 +30,32 @@ export default async function Conta({ params }: { params: Promise<{ id: string }
           <ButtonLink size="sm" href={`/movimentos/novo?tipo=transferencia&conta=${a.id}`} variant="secondary">Transferir</ButtonLink>
         </div>
       </Card>
-      {cps.length > 0 && (
-        <Card>
-          <CardTitle>Conferência com o banco</CardTitle>
-          <p className="mb-2 text-sm text-muted">Saldos informados nos extratos importados comparados com o saldo calculado pelo app.</p>
-          <ul className="divide-y divide-border text-sm">
+      <Card>
+        <CardTitle>Conferência com o banco</CardTitle>
+        <p className="mb-2 text-sm text-muted">Saldos do banco (dos extratos importados ou informados por você) comparados com o saldo calculado pelo app.</p>
+        {cps.length > 0 && (
+          <ul className="mb-3 divide-y divide-border text-sm">
             {cps.slice(0, 15).map(c => (
               <li key={c.date} className="flex items-center justify-between gap-2 py-2">
-                <span>{fmtDate(c.date)}</span>
+                <span>{fmtDate(c.date)}{c.source === 'MANUAL' && <span className="text-xs text-muted"> · informado</span>}</span>
                 <span className="flex items-center gap-2">
                   <Money cents={c.balance_cents} />
                   {c.diff === 0 ? <CircleCheck size={16} className="text-income" /> : <span className="flex items-center gap-1 text-danger"><TriangleAlert size={16} /> <Money cents={c.diff} signed /></span>}
+                  {c.source === 'MANUAL' && <ActionButton run={deleteCheckpointAction.bind(null, a.id, c.date)} confirm="Remover?" variant="ghost">×</ActionButton>}
                 </span>
               </li>
             ))}
           </ul>
-          {cps.some(c => c.diff !== 0) && <p className="mt-2 text-sm text-muted">Diferença? Verifique lançamentos faltando ou duplicados nessa data. Se for uma correção real, use <Link className="text-primary" href={`/movimentos/novo?tipo=ajuste&conta=${a.id}`}>Ajustar saldo</Link>.</p>}
-        </Card>
-      )}
+        )}
+        {cps.some(c => c.diff !== 0) && <p className="mb-3 text-sm text-muted">Diferença? Verifique lançamentos faltando ou duplicados até essa data. Se for uma correção real, use <Link className="text-primary" href={`/movimentos/novo?tipo=ajuste&conta=${a.id}`}>Ajustar saldo</Link>.</p>}
+        <ActionForm action={saveCheckpointAction} submit="Conferir saldo" resetOnSuccess>
+          <input type="hidden" name="account_id" value={a.id} />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Saldo no banco em"><input type="date" name="date" required defaultValue={addDays(monthStart(today()), -1)} className={inputClass} /></Field>
+            <Field label="Saldo (R$)"><input name="balance" required inputMode="decimal" placeholder="0,00" className={inputClass} /></Field>
+          </div>
+        </ActionForm>
+      </Card>
       <Card>
         <CardTitle>Dados da conta</CardTitle>
         <AccountForm institutions={inst.filter(i => i.is_active || i.id === a.institution_id)} today={today()} values={a} />

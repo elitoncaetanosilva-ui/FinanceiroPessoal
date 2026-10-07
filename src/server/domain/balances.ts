@@ -5,7 +5,7 @@
  */
 import { today as todayFn, type ISODate } from '@/lib/dates';
 import { listAccounts } from './catalog';
-import type { Account, Ctx } from './types';
+import { DomainError, type Account, type Ctx } from './types';
 
 export interface AccountBalance extends Account {
   balance_cents: number;
@@ -87,3 +87,18 @@ export async function checkpointsReport(ctx: Ctx, accountId: string) {
 }
 
 export { todayFn as today };
+
+/** Saldo informado pelo usuário (conferência manual com o banco). Substitui o informado na mesma data. */
+export async function setCheckpoint(ctx: Ctx, accountId: string, date: ISODate, balanceCents: number) {
+  const a = await ctx.q.query('select 1 from accounts where id=$1 and user_id=$2', [accountId, ctx.userId]);
+  if (!a[0]) throw new DomainError('Conta inválida.');
+  if (!Number.isInteger(balanceCents)) throw new DomainError('Saldo inválido.');
+  await ctx.q.query(
+    `insert into balance_checkpoints(user_id, account_id, date, balance_cents, source) values ($1,$2,$3,$4,'MANUAL')
+     on conflict (account_id, date) do update set balance_cents=excluded.balance_cents, source='MANUAL', import_batch_id=null`,
+    [ctx.userId, accountId, date, balanceCents]);
+}
+
+export async function deleteCheckpoint(ctx: Ctx, accountId: string, date: ISODate) {
+  await ctx.q.query(`delete from balance_checkpoints where account_id=$1 and date=$2 and user_id=$3 and source='MANUAL'`, [accountId, date, ctx.userId]);
+}

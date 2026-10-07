@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { safe, writeTx, type ActionResult } from '@/server/context';
 import { DomainError } from '@/server/domain/types';
 import { applyCaixa, parseCaixa, type CaixaParsed } from '@/server/import/planilha';
+import { applySync, syncOptionsFrom } from '@/server/import/planilha-sync';
 
 export async function uploadCaixaAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
   const file = fd.get('file');
@@ -48,4 +49,24 @@ export async function applyCaixaAction(_: ActionResult, fd: FormData): Promise<A
   revalidatePath('/', 'layout');
   const d = r.data!;
   return { ok: true, message: `Migração concluída: ${d.cash} lançamentos de conta, ${d.card} de cartão, ${d.incomes} entradas mensais e ${d.budgets} valores de orçamento.${d.unknown.length ? ` Subcategorias não encontradas: ${d.unknown.join(', ')}.` : ''}` };
+}
+
+export async function applySyncAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const batchId = String(fd.get('batch_id'));
+  const r = await safe(() => writeTx(async ctx => {
+    const b = (await ctx.q.query<{ status: string; info: { caixa: CaixaParsed } }>(
+      `select status, info from import_batches where id=$1 and user_id=$2 and importer_id='caixa-planilha' for update`, [batchId, ctx.userId]))[0];
+    if (!b) throw new DomainError('Planilha não encontrada. Envie de novo.');
+    if (b.status === 'COMMITTED') throw new DomainError('Esta planilha já foi aplicada. Para sincronizar de novo, envie o arquivo outra vez.');
+    const o = syncOptionsFrom(k => { const v = fd.get(k); return v == null ? null : String(v); }, b.info.caixa.cardNames);
+    if (!o) throw new DomainError('Escolha a conta da aba CASH.');
+    const offered = String(fd.get('novos') ?? '').split(',').filter(Boolean);
+    const chosen = new Set(fd.getAll('incluir').map(String));
+    o.exclude = offered.filter(k => !chosen.has(k));
+    return applySync(ctx, batchId, b.info.caixa, o);
+  }));
+  if (!r.ok) return r;
+  revalidatePath('/', 'layout');
+  const d = r.data!;
+  return { ok: true, message: `Sincronização concluída: ${d.created} lançamento(s) incluído(s) e ${d.filled} categoria(s) preenchida(s).` };
 }

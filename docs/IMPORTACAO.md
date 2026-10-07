@@ -104,3 +104,22 @@ Nada mais muda: deduplicação, classificação, revisão, vínculos e desfazer 
 - **Corte**: conta até ago/26 e faturas que vencem até set/26 (padrão). Depois disso valem só os arquivos do banco — assim nada é importado duas vezes.
 - Chaves `mig|…` tornam a migração idempotente. Linhas sem descrição usam a subcategoria.
 - Verificado com o arquivo real: o REALIZADO de entradas e saídas de **jan a ago/26 bate no centavo** com a linha TOTAL do CAIXA MENSAL.
+
+## Sincronização com a planilha atualizada
+
+`src/server/import/planilha-sync.ts` (Configurações → Planilha CAIXA): o usuário continua lançando na planilha e envia o
+arquivo de novo. Prévia (`planSync`) e aplicação (`applySync`, numa transação):
+
+- Cada linha CASH/CARTÃO procura, no mesmo portador, um lançamento ainda não usado: chave `mig|…`/`plan|…`;
+  conta: mesmo valor e data a ±3 dias; cartão: mesma parcela n/N na fatura do mesmo mês de vencimento (parcelas aceitam
+  até R$ 1,00 de arredondamento — o banco ajusta centavos na última) ou compra à vista a ±3 dias.
+- **O arquivo do banco manda.** Linha sem correspondência dentro do período já coberto por extrato/fatura importados
+  (até a última data importada naquele portador; no cartão, só compras à vista definem a data) é **ignorada** e listada
+  à parte. Só entra o que é posterior ao último arquivo do banco.
+- Lançamentos pendentes que casam com uma linha classificada recebem a subcategoria da planilha.
+- Linhas novas: chave `plan|sha1(conteúdo + ocorrência)` — reenviar o arquivo não duplica, mesmo com linhas inseridas no meio.
+  Cartão: entram na fatura do mês de vencimento da planilha; parcelas futuras ficam previstas.
+- Saldo do banco opcional (data + valor): a prévia mostra o saldo calculado depois de aplicar e, ao aplicar, ele fica
+  registrado como conferência manual da conta (também dá para informar em Contas → conta → Conferência com o banco).
+- Verificado com o arquivo real (`tests/sync.test.ts`): após extrato até 23/09 e faturas, entram 14 linhas da conta
+  (24/09 a 07/10) e 7 do cartão; o saldo calculado em 30/09 bate com o do banco (R$ 108,51); reenviar = 0 novos.
