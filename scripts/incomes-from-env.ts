@@ -30,7 +30,7 @@ export async function incomesFromEnv(log = (m: string) => console.log('[db]', m)
     log(`sincronizações da planilha já aplicadas: ${sync[0].n}`);
     const r = await db.tx(q => reconcileIncomes({ q, userId: user.id }, acc.id, spec.entries));
     log(`receitas: ${spec.entries.length} informadas · ${r.kept} já no app (${r.redated} com data ajustada para o 1º dia útil) · ` +
-      `${r.classified} classificadas no extrato (${r.splitMovements} rateio) · ${r.createdMain} lançadas no histórico · ` +
+      `${r.classified} classificadas no extrato (${r.splitMovements} rateio) · ${r.createdMain} lançadas na conta principal · ` +
       `${r.createdOther} lançadas em "Outras contas" · ${r.divergent} divergentes`);
   } finally {
     await db.close();
