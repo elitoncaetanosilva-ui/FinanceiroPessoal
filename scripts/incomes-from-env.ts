@@ -16,11 +16,15 @@ export async function incomesFromEnv(log = (m: string) => console.log('[db]', m)
   try {
     const user = (await db.query<{ id: string }>('select id from users where email=lower($1)', [spec.email.trim()]))[0];
     if (!user) { log('INCOMES_JSON: usuário não encontrado — nada feito'); return; }
-    const accs = await db.query<{ id: string; name: string; n: number }>(
-      `select a.id, a.name, (select count(*)::int from movements m where m.account_id=a.id and m.source='IMPORT') as n
+    const accs = await db.query<{ id: string; name: string; n: number; last: string | null; opening: string }>(
+      `select a.id, a.name, a.opening_balance_date::text as opening,
+         (select count(*)::int from movements m where m.account_id=a.id and m.source='IMPORT' and m.deleted_at is null) as n,
+         (select max(m.date)::text from movements m where m.account_id=a.id and m.source='IMPORT' and m.deleted_at is null) as last
        from accounts a where a.user_id=$1 and a.is_active and a.type='CHECKING' order by n desc`, [user.id]);
+    log(`contas correntes: ${accs.map(a => `${a.name} (início ${a.opening}, ${a.n} importados, último ${a.last ?? '—'})`).join(' · ')}`);
     const acc = accs.find(a => spec.account && a.name.toLowerCase().startsWith(spec.account.toLowerCase())) ?? accs[0];
     if (!acc) { log('INCOMES_JSON: conta corrente não encontrada — nada feito'); return; }
+    log(`conta usada: ${acc.name}`);
     const r = await db.tx(q => reconcileIncomes({ q, userId: user.id }, acc.id, spec.entries));
     log(`receitas: ${spec.entries.length} informadas · ${r.kept} já no app (${r.redated} com data ajustada para o 1º dia útil) · ` +
       `${r.classified} classificadas no extrato (${r.splitMovements} rateio) · ${r.createdMain} lançadas no histórico · ` +
