@@ -31,11 +31,30 @@ async function target(db: Db, email: string, account: string | undefined, log: L
   return { userId: user.id, accountId: acc.id };
 }
 
+/** Diagnóstico só com contagens: onde está cada tipo de lançamento (por conta/cartão e origem). */
+async function diagnose(db: Db, email: string, log: Log) {
+  const user = (await db.query<{ id: string }>('select id from users where email=lower($1)', [email.trim()]))[0];
+  if (!user) { log('diag: usuário não encontrado'); return; }
+  const rows = await db.query<{ holder: string; kind: string; origin: string; n: number; first: string; last: string }>(
+    `select coalesce(a.name || ' [' || a.type || case when a.is_active then '' else ', inativa' end || ', início ' || a.opening_balance_date || ']', 'cartão ' || c.name) as holder,
+       m.kind, case when m.dedup_key like 'mig|cash|%' then 'mig-cash' when m.dedup_key like 'mig|card|%' then 'mig-card'
+         when m.dedup_key like 'mig|inc|%' then 'mig-inc' when m.dedup_key like 'plan|%' then 'sync' when m.dedup_key like 'inc|%' then 'inc'
+         else m.source end as origin,
+       count(*)::int as n, min(m.date)::text as first, max(m.date)::text as last
+     from movements m left join accounts a on a.id=m.account_id left join credit_cards c on c.id=m.card_id
+     where m.user_id=$1 and m.deleted_at is null group by 1,2,3 order by 1,2,3`, [user.id]);
+  for (const r of rows) log(`diag: ${r.holder} | ${r.kind} | ${r.origin} | ${r.n} | ${r.first}..${r.last}`);
+  const b = await db.query<{ importer_id: string; status: string; n: number }>(
+    'select importer_id, status, count(*)::int as n from import_batches where user_id=$1 group by 1,2 order by 1,2', [user.id]);
+  for (const r of b) log(`diag: lotes ${r.importer_id} ${r.status}: ${r.n}`);
+}
+
 export async function opsFromEnv(log: Log = m => console.log('[db]', m)) {
-  const { INCOMES_JSON, CAIXA_SYNC_B64, CLOSE_JSON } = process.env;
-  if (!INCOMES_JSON && !CAIXA_SYNC_B64 && !CLOSE_JSON) return;
+  const { INCOMES_JSON, CAIXA_SYNC_B64, CLOSE_JSON, DIAG_EMAIL } = process.env;
+  if (!INCOMES_JSON && !CAIXA_SYNC_B64 && !CLOSE_JSON && !DIAG_EMAIL) return;
   const db = await createDb();
   try {
+    if (DIAG_EMAIL) await diagnose(db, DIAG_EMAIL, log);
     if (INCOMES_JSON) {
       const spec = JSON.parse(INCOMES_JSON) as { email: string; account?: string; entries: IncomeEntry[] };
       const t = await target(db, spec.email, spec.account, log);
