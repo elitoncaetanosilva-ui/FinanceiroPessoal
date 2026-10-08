@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Tokens de cor — claro */
+:root {
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --surface-2: #eef2f0;
+  --border: #dde4e1;
+  --text: #15201c;
+  --muted: #5d6b66;
+  --primary: #0d6b5c;
+  --primary-strong: #0a5347;
+  --primary-soft: #dcefe9;
+  --on-primary: #ffffff;
+  --income: #13804a;
+  --expense: #c2410c;
+  --danger: #c62828;
+  --danger-soft: #fdecea;
+  --warning: #9a6700;
+  --warning-soft: #fff4d6;
+  --planned: #7c5cd6;
+  --planned-soft: #eee9fb;
+  --shadow: 0 1px 2px rgba(16, 24, 20, .06), 0 2px 8px rgba(16, 24, 20, .05);
+  /* gráficos (paleta validada: scripts do guia de dataviz) */
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+  --chart-grid: #e6ebe8; --chart-axis: #6b7772; --chart-zero: #9aa5a0;
+  color-scheme: light;
+}
+/* escuro: sistema (se o usuário não forçou claro) ou forçado */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1412; --surface: #151d1a; --surface-2: #1c2622; --border: #2a3632; --text: #e7efeb; --muted: #97a8a1;
+    --primary: #3cc4a5; --primary-strong: #63d6bb; --primary-soft: #173a32; --on-primary: #06201a;
+    --income: #4ccf86; --expense: #ff9a62; --danger: #ff6b6b; --danger-soft: #3a1c1c; --warning: #f2c14e; --warning-soft: #3a3018;
+    --planned: #b09cff; --planned-soft: #2a2447; --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --chart-grid: #26312d; --chart-axis: #97a8a1; --chart-zero: #5b6863;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1412; --surface: #151d1a; --surface-2: #1c2622; --border: #2a3632; --text: #e7efeb; --muted: #97a8a1;
+  --primary: #3cc4a5; --primary-strong: #63d6bb; --primary-soft: #173a32; --on-primary: #06201a;
+  --income: #4ccf86; --expense: #ff9a62; --danger: #ff6b6b; --danger-soft: #3a1c1c; --warning: #f2c14e; --warning-soft: #3a3018;
+  --planned: #b09cff; --planned-soft: #2a2447; --shadow: 0 1px 2px rgba(0,0,0,.4);
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --chart-grid: #26312d; --chart-axis: #97a8a1; --chart-zero: #5b6863;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-soft: var(--primary-soft);
+  --color-on-primary: var(--on-primary);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-planned: var(--planned);
+  --color-planned-soft: var(--planned-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+/* números alinhados */
+.tnum, .money { font-variant-numeric: tabular-nums; }
+
+/* modo privacidade: oculta valores */
+html[data-privacy="on"] .money { filter: blur(7px); user-select: none; }
+
+/* barra de previsto hachurada */
+.hatch {
+  background-image: repeating-linear-gradient(135deg, var(--planned) 0 4px, color-mix(in srgb, var(--planned) 40%, transparent) 4px 8px);
+}
+
+/* folha inferior (dialog nativo) */
+dialog.sheet {
+  margin: auto auto 0 auto; width: 100%; max-width: 560px; max-height: 92dvh;
+  border: 0; border-radius: 20px 20px 0 0; padding: 0; background: var(--surface); color: var(--text);
+}
+dialog.sheet::backdrop { background: rgba(0, 0, 0, .45); }
+@media (min-width: 1024px) {
+  dialog.sheet { margin: auto; border-radius: 16px; }
+}
+dialog.sheet[open] { animation: sheet-up .18s ease-out; }
+@keyframes sheet-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+input, select, textarea { font-size: 16px; } /* evita zoom no iOS */
+@media (min-width: 1024px) { input, select, textarea { font-size: 14px; } }

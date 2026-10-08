@@ -1,15 +1,44 @@
 {
-  "name": "conciliador-caixa-2026",
+  "name": "financeiro-pessoal",
   "version": "1.0.0",
   "private": true,
-  "description": "Conciliação local (no navegador) de extrato e fatura Itaú com a planilha CAIXA 2026",
+  "description": "Controle e planejamento financeiro pessoal — Next.js + Postgres (Neon) na Vercel",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "test": "node --test test/engine.test.js",
-    "fixtures": "node test/make-fixtures.js",
-    "start": "npx --yes serve public -l 3000"
+    "dev": "next dev",
+    "build": "tsx scripts/vercel-build.ts",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "user:create": "tsx scripts/create-user.ts",
+    "e2e": "tsx tests/e2e/screens.ts"
+  },
+  "dependencies": {
+    "@e965/xlsx": "0.20.3",
+    "@vercel/functions": "^3.9.9",
+    "lucide-react": "^1.48.0",
+    "next": "16.3.6",
+    "pg": "^8.23.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "recharts": "^3.10.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "xlsx": "0.18.5"
-  },
-  "license": "UNLICENSED"
+    "@electric-sql/pglite": "^0.5.8",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.20.4",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "playwright": "1.56.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.9.3",
+    "vitest": "^5.0.2",
+    "tsx": "^4.23.15"
+  }
 }
