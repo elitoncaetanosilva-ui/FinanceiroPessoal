@@ -6,11 +6,13 @@
  *   INCOMES_JSON     {"email","account?","entries":[IncomeEntry]}             → reconcileIncomes
  *   CAIXA_SYNC_B64   gzip+base64 de {"email","account?","parsed":CaixaParsed}  → sincronização da planilha (planSync/applySync)
  *   CLOSE_JSON       {"email","account?","spec":CloseSpec}                    → closeMonths (pagamentos de fatura + conferências)
+ *   CONSOLIDATE_JSON {"email","from","to","spec":CloseSpec}                   → consolidateAccounts (exclui a conta "from") + closeMonths,
+ *                    numa transação que só é gravada se todos os meses conferirem
  */
 import { createHash } from 'node:crypto';
 import zlib from 'node:zlib';
 import { createDb, type Db } from '../src/server/db';
-import { closeMonths, type CloseSpec } from '../src/server/domain/closing';
+import { closeMonths, consolidateAccounts, type CloseResult, type CloseSpec } from '../src/server/domain/closing';
 import { reconcileIncomes, type IncomeEntry } from '../src/server/domain/incomes';
 import type { CaixaParsed } from '../src/server/import/planilha';
 import { applySync, planSync } from '../src/server/import/planilha-sync';
@@ -50,8 +52,8 @@ async function diagnose(db: Db, email: string, log: Log) {
 }
 
 export async function opsFromEnv(log: Log = m => console.log('[db]', m)) {
-  const { INCOMES_JSON, CAIXA_SYNC_B64, CLOSE_JSON, DIAG_EMAIL } = process.env;
-  if (!INCOMES_JSON && !CAIXA_SYNC_B64 && !CLOSE_JSON && !DIAG_EMAIL) return;
+  const { INCOMES_JSON, CAIXA_SYNC_B64, CLOSE_JSON, CONSOLIDATE_JSON, DIAG_EMAIL } = process.env;
+  if (!INCOMES_JSON && !CAIXA_SYNC_B64 && !CLOSE_JSON && !CONSOLIDATE_JSON && !DIAG_EMAIL) return;
   const db = await createDb();
   try {
     if (DIAG_EMAIL) await diagnose(db, DIAG_EMAIL, log);
@@ -98,6 +100,32 @@ export async function opsFromEnv(log: Log = m => console.log('[db]', m)) {
         const r = await db.tx(q => closeMonths({ q, userId: t.userId }, t.accountId, spec.spec));
         log(`fechamento: saldo inicial ${r.openingChanged ? 'ajustado' : 'já correto'} · ${r.paymentsCreated} pagamentos de fatura lançados`);
         log(`conferência: ${r.months.map(m => `${fmtMonth(m.date)} ${m.diff === 0 ? 'ok' : `dif ${m.diff}`}`).join(' · ')}`);
+      }
+    }
+    if (CONSOLIDATE_JSON) {
+      const spec = JSON.parse(CONSOLIDATE_JSON) as { email: string; from: string; to: string; spec: CloseSpec };
+      const user = (await db.query<{ id: string }>('select id from users where email=lower($1)', [spec.email.trim()]))[0];
+      const accs = user ? await db.query<{ id: string; name: string }>('select id, name from accounts where user_id=$1', [user.id]) : [];
+      const from = accs.find(a => a.name === spec.from), to = accs.find(a => a.name === spec.to);
+      if (!user || !from || !to) log(`consolidação: ${!user ? 'usuário' : !to ? `conta "${spec.to}"` : `conta "${spec.from}"`} não encontrada — nada feito`);
+      else {
+        class NotClosed extends Error { constructor(public r: CloseResult) { super('não fechou'); } }
+        try {
+          const out = await db.tx(async q => {
+            const ctx = { q, userId: user.id };
+            const c = await consolidateAccounts(ctx, from.id, to.id);
+            const r = await closeMonths(ctx, to.id, spec.spec);
+            if (r.months.some(m => m.diff !== 0)) throw new NotClosed(r);
+            return { c, r };
+          });
+          log(`consolidação: ${out.c.revertedBatches} lote(s) de extrato desfeito(s) · ${out.c.movedIncomes} receitas movidas · ` +
+            `${out.c.removedDuplicates} gastos duplicados removidos · ${out.c.moved} outros movidos · conta "${spec.from}" excluída · ` +
+            `${out.r.paymentsCreated} pagamentos de fatura + ${out.r.accountSidesCreated} débitos de pagamento lançados`);
+          log(`conferência: ${out.r.months.map(m => `${fmtMonth(m.date)} ok`).join(' · ')}`);
+        } catch (e) {
+          if (e instanceof NotClosed) log(`consolidação NÃO aplicada (desfeita): ${e.r.months.map(m => `${fmtMonth(m.date)} ${m.diff === 0 ? 'ok' : `dif ${m.diff}`}`).join(' · ')}`);
+          else log(`consolidação NÃO aplicada (desfeita) — erro: ${(e as Error).message}`);
+        }
       }
     }
   } finally {
