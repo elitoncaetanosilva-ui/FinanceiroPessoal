@@ -106,7 +106,8 @@ export async function closeMonths(ctx: Ctx, accountId: string, spec: CloseSpec):
  *   - receitas do histórico (mig|inc) vão para a conta nova;
  *   - gastos do histórico (mig|cash) que a conta nova já tem (mesma data e valor) são excluídos; os demais vão para ela;
  *   - qualquer outro lançamento restante vai para a conta nova; dados bancários (agência/conta) também,
- *     para os próximos extratos caírem nela.
+ *     para os próximos extratos caírem nela;
+ *   - a conta antiga é excluída.
  */
 export async function consolidateAccounts(ctx: Ctx, fromId: string, toId: string) {
   const { revertBatch } = await import('../import/pipeline');
@@ -138,8 +139,15 @@ export async function consolidateAccounts(ctx: Ctx, fromId: string, toId: string
   await ctx.q.query(
     `update accounts set branch=coalesce(branch, $2), number=coalesce(number, $3), institution_id=coalesce(institution_id, $4), updated_at=now() where id=$1`,
     [toId, from.branch, from.number, from.institution_id]);
-  await ctx.q.query('update accounts set branch=null, number=null, is_active=false, updated_at=now() where id=$1', [fromId]);
   await ctx.q.query('delete from balance_checkpoints where account_id=$1', [fromId]);
+  // a conta antiga deixa de existir: tudo o que apontava para ela (cartões, regras, recorrências, lotes e os
+  // lançamentos já excluídos, mantidos só para histórico) passa a apontar para a conta nova
+  for (const t of ['credit_cards set payment_account_id', 'recurring_rules set account_id', 'classification_rules set account_id',
+    'installment_groups set account_id', 'import_batches set account_id', 'movements set account_id']) {
+    const [table, col] = t.split(' set ');
+    await ctx.q.query(`update ${table} set ${col}=$2 where ${col}=$1`, [fromId, toId]);
+  }
+  await ctx.q.query('delete from accounts where id=$1 and user_id=$2', [fromId, ctx.userId]);
   await audit(ctx, 'account', toId, 'CONSOLIDATE', null, { from: fromId, ...r });
   return r;
 }

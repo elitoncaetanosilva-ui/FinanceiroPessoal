@@ -254,7 +254,8 @@ describe.skipIf(!has)('consolidação de duas contas (réplica do estado de prod
     expect(c).toMatchObject({ revertedBatches: 1, movedIncomes: 33, removedDuplicates: 233, moved: 0 });
     const r = await inTx(env, ctx => closeMonths(ctx, acc, spec));
     expect(r.months.map(m => m.diff)).toEqual(finals.map(() => 0));
-    expect((await env.db.query<{ n: number }>('select count(*)::int as n from movements where account_id=$1 and deleted_at is null', [oldAcc]))[0].n).toBe(0);
+    expect((await env.db.query('select 1 from accounts where id=$1', [oldAcc])).length).toBe(0);    // conta antiga excluída
+    expect((await env.db.query<{ n: number }>('select count(*)::int as n from credit_cards where payment_account_id=$1', [acc]))[0].n).toBe(2);
     // relatórios sem duplicidade: entradas e saídas realizadas = CAIXA MENSAL
     const OUT = [1215545, 993863, 1241248, 1270502, 991677, 1336599, 1068082, 1372535];
     const IN = [1098503, 1118100, 1421245, 942484, 1106205, 1330219, 1262618, 987700, 1564203];
@@ -267,7 +268,6 @@ describe.skipIf(!has)('consolidação de duas contas (réplica do estado de prod
     const ids = await env.db.query<{ number: string | null }>('select number from accounts where id=$1', [acc]);
     expect(ids[0].number).toBe('04594-2');
     const n = await count(env);
-    expect((await inTx(env, ctx => consolidateAccounts(ctx, oldAcc, acc)))).toMatchObject({ revertedBatches: 0, movedIncomes: 0, removedDuplicates: 0, moved: 0 });
     expect((await inTx(env, ctx => closeMonths(ctx, acc, spec)))).toMatchObject({ paymentsCreated: 0, accountSidesCreated: 0 });
     expect(await count(env)).toBe(n);
   });
