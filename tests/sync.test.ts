@@ -221,7 +221,7 @@ describe.skipIf(!has)('consolidação de duas contas (réplica do estado de prod
     const nu = await card(env, 'Fatura Nubank', 20, 27, 500_000, oldAcc, ['NU PAGAMENT']);
     await env.db.query(`update credit_cards set institution_id=(select id from institutions where user_id=$2 and name='Nubank') where id=$1`, [nu, env.userId]);
     const old = parseCaixa(read('CAIXA_2026.xlsx'));
-    await inTx(env, ctx => applyCaixa(ctx, old, { accountId: oldAcc, cardMap: { 'Itaú Black': itau, Nubank: nu }, cashCutoff: '2026-08-01', cardCutoff: '2026-09-01', importHistory: true, importBudgets: true }));
+    await inTx(env, ctx => applyCaixa(ctx, old, { accountId: oldAcc, cardMap: { 'Itaú Black': itau, Nubank: nu }, cashCutoff: '2026-08-01', cardCutoff: '2026-08-01', importHistory: true, importBudgets: true }));
     await importFile(env, 'Extrato_Conta_Corrente-250920262155.xls', read('Extrato_Conta_Corrente-250920262155.xls'));
     await importFile(env, 'fatura-aberta-final_5850-outubro2026.xlsx', read('fatura-aberta-final_5850-outubro2026.xlsx'));
     await importFile(env, 'Nubank_2026-10-27.csv', read('Nubank_2026-10-27.csv'), { cardId: nu });
@@ -235,6 +235,8 @@ describe.skipIf(!has)('consolidação de duas contas (réplica do estado de prod
     const cardMap = { 'Itaú Black': itau, Nubank: nu };
     const plan = await planSync(env.ctx, p, { accountId: acc, cardMap });
     expect(plan.totals.newCash).toBe(300);
+    // faturas de setembro (não migradas, não importadas) entram pela planilha; a de outubro veio do arquivo do banco
+    expect(plan.newItems.filter(i => i.sheet === 'CARTÃO' && i.due.startsWith('2026-09')).length).toBeGreaterThan(50);
     const b = await env.db.query<{ id: string }>(`insert into import_batches(user_id, file_name, file_sha256, file_size, importer_id) values ($1,'x','y',1,'caixa-planilha') returning id`, [env.userId]);
     await inTx(env, ctx => applySync(ctx, b[0].id, p, { accountId: acc, cardMap }));
     const finals = [47240, 171477, 351474, 23456, 137984, 131604, 326140, -58695, 10851];
@@ -257,12 +259,13 @@ describe.skipIf(!has)('consolidação de duas contas (réplica do estado de prod
     expect((await env.db.query('select 1 from accounts where id=$1', [oldAcc])).length).toBe(0);    // conta antiga excluída
     expect((await env.db.query<{ n: number }>('select count(*)::int as n from credit_cards where payment_account_id=$1', [acc]))[0].n).toBe(2);
     // relatórios sem duplicidade: entradas e saídas realizadas = CAIXA MENSAL
-    const OUT = [1215545, 993863, 1241248, 1270502, 991677, 1336599, 1068082, 1372535];
+    // setembro: saídas = entradas − (saldo final − inicial) = 15.642,03 − 695,46
+    const OUT = [1215545, 993863, 1241248, 1270502, 991677, 1336599, 1068082, 1372535, 1494657];
     const IN = [1098503, 1118100, 1421245, 942484, 1106205, 1330219, 1262618, 987700, 1564203];
     for (let m = 1; m <= 9; m++) {
       const v = await budgetView(env.ctx, `2026-0${m}-01`);
       expect([m, v.sections.find(s => s.section === 'IN')!.total.realized]).toEqual([m, IN[m - 1]]);
-      if (m <= 8) expect([m, v.sections.find(s => s.section === 'OUT')!.total.realized]).toEqual([m, OUT[m - 1]]);
+      expect([m, v.sections.find(s => s.section === 'OUT')!.total.realized]).toEqual([m, OUT[m - 1]]);
     }
     // próximos extratos caem na conta nova
     const ids = await env.db.query<{ number: string | null }>('select number from accounts where id=$1', [acc]);

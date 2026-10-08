@@ -11,7 +11,8 @@
  * Parcelas futuras previstas (criadas pela importação da fatura) contam como "já no app" — continuam previstas.
  *
  * O arquivo do banco manda: linhas sem correspondência dentro do período já coberto por extrato/fatura importados
- * (até a última data importada naquele portador) são IGNORADAS — o saldo do banco já confere sem elas.
+ * (conta: até a última data importada; cartão: só nas faturas que vieram no arquivo, até a última compra) são
+ * IGNORADAS — o arquivo do banco já confere sem elas.
  * Só entram as linhas posteriores ao último arquivo importado.
  * Nada é apagado nem alterado além do preenchimento de categorias pendentes; tudo é feito numa transação.
  */
@@ -113,14 +114,15 @@ export async function planSync(ctx: Ctx, p: CaixaParsed, o: SyncOptions): Promis
 
   // cobertura dos arquivos do banco: última data importada (no cartão, compras à vista — parcelas trazem datas
   // projetadas) e último mês de vencimento com lançamentos importados
-  const cov = await ctx.q.query<{ hid: string; until: ISODate | null; until_any: ISODate | null; due: ISODate | null }>(
+  const cov = await ctx.q.query<{ hid: string; until: ISODate | null; until_any: ISODate | null; dues: (ISODate | null)[] }>(
     `select coalesce(m.account_id, m.card_id) as hid,
-       max(m.date) filter (where m.installment_number is null) as until, max(m.date) as until_any, max(s.due_month) as due
+       max(m.date) filter (where m.installment_number is null) as until, max(m.date) as until_any, array_agg(distinct s.due_month) as dues
      from movements m left join card_statements s on s.id=m.statement_id
      where m.user_id=$1 and m.deleted_at is null and m.source='IMPORT' and m.status='REALIZED' and m.kind <> 'CARD_PAYMENT'
        and coalesce(m.account_id, m.card_id) = any($2::uuid[])
      group by 1`, [ctx.userId, holderIds]);
-  const covBy = new Map(cov.map(c => [c.hid, { until: c.until ?? c.until_any, due: c.due }]));
+  // no cartão, um arquivo do banco cobre só as faturas que ele trouxe (não as anteriores)
+  const covBy = new Map(cov.map(c => [c.hid, { until: c.until ?? c.until_any, dues: new Set(c.dues.filter(Boolean)) }]));
   const used = new Set<string>();
 
   // identidade estável da linha: conteúdo + ocorrência (não depende da posição na planilha)
@@ -182,7 +184,7 @@ export async function planSync(ctx: Ctx, p: CaixaParsed, o: SyncOptions): Promis
     const c = covBy.get(hid);
     const covered = !m && !!c?.until && (sheet === 'CASH'
       ? r.date <= c.until
-      : r.date <= c.until && !!c.due && dueMonth <= c.due);
+      : r.date <= c.until && c.dues.has(dueMonth));
     const future = sheet === 'CASH' ? r.date > today : dueMonth > monthStart(today) && !!inst && inst.n > 1;
     items.push({
       key, sheet, row: r.row, date: r.date, due: r.due, description: r.description, sub: r.sub, amountCents, holder,
