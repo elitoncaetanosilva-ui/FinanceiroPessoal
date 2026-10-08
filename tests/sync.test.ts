@@ -205,3 +205,70 @@ describe.skipIf(!has)('fechamento dos meses pelo controle manual (arquivos reais
     expect(rows.filter(x => x.status === 'NEW').map(x => x.description)).toEqual(['PAG BOLETO J TOMASI IMOVEIS']);
   });
 });
+
+describe.skipIf(!has)('consolidação de duas contas (réplica do estado de produção)', () => {
+  it('histórico repartido entre conta antiga (migração + extrato) e conta nova (controle manual) vira uma conta só, fechando todos os meses', async () => {
+    const { parseCaixa, applyCaixa } = await import('@/server/import/planilha');
+    const { reconcileIncomes } = await import('@/server/domain/incomes');
+    const { planSync, applySync } = await import('@/server/import/planilha-sync');
+    const { closeMonths, consolidateAccounts } = await import('@/server/domain/closing');
+    const { budgetView } = await import('@/server/domain/budget');
+    const env = await setup();
+    const oldAcc = await account(env, 'Itaú CC', 'CHECKING', -58695, '2026-08-31');
+    await env.db.query(`update accounts set branch='7449', number='04594-2' where id=$1`, [oldAcc]);
+    const itau = await card(env, 'Itaú Black', 30, 7, 2_000_000, oldAcc, ['FATURA ITAU UNICLASS']);
+    await env.db.query(`update credit_cards set last4='5850' where id=$1`, [itau]);
+    const nu = await card(env, 'Fatura Nubank', 20, 27, 500_000, oldAcc, ['NU PAGAMENT']);
+    await env.db.query(`update credit_cards set institution_id=(select id from institutions where user_id=$2 and name='Nubank') where id=$1`, [nu, env.userId]);
+    const old = parseCaixa(read('CAIXA_2026.xlsx'));
+    await inTx(env, ctx => applyCaixa(ctx, old, { accountId: oldAcc, cardMap: { 'Itaú Black': itau, Nubank: nu }, cashCutoff: '2026-08-01', cardCutoff: '2026-09-01', importHistory: true, importBudgets: true }));
+    await importFile(env, 'Extrato_Conta_Corrente-250920262155.xls', read('Extrato_Conta_Corrente-250920262155.xls'));
+    await importFile(env, 'fatura-aberta-final_5850-outubro2026.xlsx', read('fatura-aberta-final_5850-outubro2026.xlsx'));
+    await importFile(env, 'Nubank_2026-10-27.csv', read('Nubank_2026-10-27.csv'), { cardId: nu });
+    await env.db.query('update accounts set is_active=false where id=$1', [oldAcc]);
+    const acc = await account(env, 'Itaú Conta Corrente', 'CHECKING', 164282, '2025-12-31');
+
+    // o que foi aplicado em produção na conta nova
+    await inTx(env, ctx => reconcileIncomes(ctx, acc, old.incomes.map(i => ({ month: i.month, group: i.group, sub: i.sub, cents: i.valueCents,
+      ...(i.month === '2026-09-01' && ['Salário', 'Rescisão'].includes(i.sub) ? { date: '2026-09-03', ref: 'TED 001.3220.ELITON C D' } : {}) }))));
+    const p = parseCaixa(read('CAIXA_2026_v2.xlsx'));
+    const cardMap = { 'Itaú Black': itau, Nubank: nu };
+    const plan = await planSync(env.ctx, p, { accountId: acc, cardMap });
+    expect(plan.totals.newCash).toBe(300);
+    const b = await env.db.query<{ id: string }>(`insert into import_batches(user_id, file_name, file_sha256, file_size, importer_id) values ($1,'x','y',1,'caixa-planilha') returning id`, [env.userId]);
+    await inTx(env, ctx => applySync(ctx, b[0].id, p, { accountId: acc, cardMap }));
+    const finals = [47240, 171477, 351474, 23456, 137984, 131604, 326140, -58695, 10851];
+    const spec = {
+      opening: { date: '2025-12-31', cents: 164282 },
+      monthEnds: finals.map((cents, i) => ({ date: new Date(Date.UTC(2026, i + 1, 0)).toISOString().slice(0, 10), cents })),
+      payments: [
+        { card: 'Itaú', dueMonth: '2026-09-01', date: '2026-09-08', description: 'FATURA ITAU UNICLASS MC BLA' },
+        { card: 'Fatura Nubank', dueMonth: '2026-09-01', date: '2026-09-21', description: 'PIX QRS NU PAGAMENT20/09' },
+      ],
+    };
+    const first = await inTx(env, ctx => closeMonths(ctx, acc, spec));
+    expect(first.months[0].diff).toBe(1098503);                       // = produção: faltavam as receitas de janeiro
+
+    // consolidação
+    const c = await inTx(env, ctx => consolidateAccounts(ctx, oldAcc, acc));
+    expect(c).toMatchObject({ revertedBatches: 1, movedIncomes: 33, removedDuplicates: 233, moved: 0 });
+    const r = await inTx(env, ctx => closeMonths(ctx, acc, spec));
+    expect(r.months.map(m => m.diff)).toEqual(finals.map(() => 0));
+    expect((await env.db.query<{ n: number }>('select count(*)::int as n from movements where account_id=$1 and deleted_at is null', [oldAcc]))[0].n).toBe(0);
+    // relatórios sem duplicidade: entradas e saídas realizadas = CAIXA MENSAL
+    const OUT = [1215545, 993863, 1241248, 1270502, 991677, 1336599, 1068082, 1372535];
+    const IN = [1098503, 1118100, 1421245, 942484, 1106205, 1330219, 1262618, 987700, 1564203];
+    for (let m = 1; m <= 9; m++) {
+      const v = await budgetView(env.ctx, `2026-0${m}-01`);
+      expect([m, v.sections.find(s => s.section === 'IN')!.total.realized]).toEqual([m, IN[m - 1]]);
+      if (m <= 8) expect([m, v.sections.find(s => s.section === 'OUT')!.total.realized]).toEqual([m, OUT[m - 1]]);
+    }
+    // próximos extratos caem na conta nova
+    const ids = await env.db.query<{ number: string | null }>('select number from accounts where id=$1', [acc]);
+    expect(ids[0].number).toBe('04594-2');
+    const n = await count(env);
+    expect((await inTx(env, ctx => consolidateAccounts(ctx, oldAcc, acc)))).toMatchObject({ revertedBatches: 0, movedIncomes: 0, removedDuplicates: 0, moved: 0 });
+    expect((await inTx(env, ctx => closeMonths(ctx, acc, spec)))).toMatchObject({ paymentsCreated: 0, accountSidesCreated: 0 });
+    expect(await count(env)).toBe(n);
+  });
+});
